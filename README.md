@@ -13,7 +13,7 @@ This project delivers an offline text correction and simplification tool designe
 
 - Packaged for Windows: fully offline with embedded Java Runtime, LanguageTool, Hunspell, and spaCy. Distributed via PyInstaller + Inno Setup installer.
 
--Safe by design: strict “no-additions” policy (no invented connectors, entities, or paraphrases). Guardrails prevent unsafe edits.
+- Safe by design: strict “no-additions” policy (no invented connectors, entities, or paraphrases). Guardrails prevent unsafe edits.
 
 # Intended workflow:
 
