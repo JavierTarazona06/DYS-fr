@@ -1,0 +1,11 @@
+improver: lt
+
+lt:
+  lang: fr
+  server:
+    host: 127.0.0.1
+    port: 8081
+    jar_path: resources/languagetool/languagetool-server.jar
+    jre_bin: java
+    allow_origin: "*"
+    heap_mb: 256

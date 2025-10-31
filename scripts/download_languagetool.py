@@ -23,7 +23,7 @@ from pathlib import Path
 
 DEFAULT_URL = "https://internal1.languagetool.org/snapshots/LanguageTool-latest-snapshot.zip"
 DEFAULT_ZIP = "LanguageTool-latest-snapshot.zip"
-DEFAULT_TARGET = "LanguageTool-6.7"
+DEFAULT_TARGET = "resources/languagetool"
 
 def download(url: str, dest: Path) -> None:
     print(f"Downloading: {url}")
