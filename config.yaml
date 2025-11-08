@@ -9,3 +9,8 @@ lt:
     jre_bin: java
     allow_origin: "*"
     heap_mb: 256
+
+spacy:
+  model: fr_core_news_md
+  only_ner_pos: true
+  target_dir: resources/spacy

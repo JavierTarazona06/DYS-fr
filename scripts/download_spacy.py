@@ -25,8 +25,18 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-DEFAULT_MODEL = "fr_core_news_md"
-DEFAULT_TARGET_DIR = "resources/spacy"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.utils.config import load_config
+
+
+cfg = load_config()
+spacy = cfg["spacy"]
+
+DEFAULT_MODEL = spacy["model"]
+DEFAULT_TARGET_DIR = spacy["target_dir"]
 
 
 def resolve_path(path: str | Path, root: Path) -> Path:
