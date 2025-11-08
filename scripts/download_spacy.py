@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 """
-Download a spaCy model wheel for offline installation.
+Download and install a spaCy model wheel for offline installation.
 
 This script runs:
     python -m spacy info <model> --url
-to obtain the deterministic download URL, then downloads the wheel into the
-project's resources directory (default: resources/spacy).
+    python -m pip install --no-deps <wheel>
+    python -m spacy validate
+to obtain the deterministic download URL, download the wheel into the project's
+resources directory (default: resources/spacy), install it, and validate the setup.
 
 Usage:
     python scripts/download_spacy.py
     python scripts/download_spacy.py --model fr_core_news_md
-    python scripts/download_spacy.py --target-dir ./resources/spacy --force
+    python scripts/download_spacy.py --target-dir ./resources/spacy --force-reinstall
 """
 
 from __future__ import annotations
@@ -54,14 +56,19 @@ def get_model_url(python_exec: str, model: str) -> str:
     return url
 
 
-def download(url: str, destination: Path, force: bool) -> Path:
+def download(url: str, destination: Path, force_reinstall: bool) -> Path:
     """Download the URL into destination. Returns the path to the saved file."""
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    if destination.exists() and not force:
-        raise FileExistsError(
-            f"Destination already exists: {destination} (use --force to overwrite)"
+    if destination.exists() and not force_reinstall:
+        size_mb = destination.stat().st_size / (1024 * 1024)
+        print(
+            f"Wheel already exists, reusing: {destination} ({size_mb:.2f} MB)"
         )
+        return destination
+
+    if destination.exists() and force_reinstall:
+        print(f"Overwriting existing wheel (--force-reinstall): {destination}")
 
     print(f"Downloading: {url}")
     with urllib.request.urlopen(url) as response:
@@ -71,6 +78,20 @@ def download(url: str, destination: Path, force: bool) -> Path:
     size_mb = destination.stat().st_size / (1024 * 1024)
     print(f"Saved: {destination} ({size_mb:.2f} MB)")
     return destination
+
+
+def install_wheel(python_exec: str, wheel_path: Path, force_reinstall: bool) -> None:
+    """Install the downloaded wheel using pip."""
+    if not wheel_path.exists():
+        raise FileNotFoundError(f"Wheel not found: {wheel_path}")
+
+    cmd = [python_exec, "-m", "pip", "install", "--no-deps"]
+    if force_reinstall:
+        cmd.append("--force-reinstall")
+    cmd.append(str(wheel_path))
+
+    print(f"Running: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
 
 
 def run_spacy_validate(python_exec: str) -> None:
@@ -100,9 +121,12 @@ def main() -> None:
         help="Python executable to use for running spaCy (default: current interpreter)",
     )
     parser.add_argument(
-        "--force",
+        "--force-reinstall",
         action="store_true",
-        help="Overwrite the wheel if it already exists at the destination.",
+        dest="force_reinstall",
+        help=(
+            "Re-download the wheel if it exists and force pip to reinstall the model."
+        ),
     )
     args = parser.parse_args()
 
@@ -134,12 +158,18 @@ def main() -> None:
     destination = target_dir / filename
 
     try:
-        download(url, destination, args.force)
-    except FileExistsError as exc:
-        print(exc, file=sys.stderr)
-        sys.exit(1)
+        wheel_path = download(url, destination, args.force_reinstall)
     except Exception as exc:
         print(f"Download failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        install_wheel(python_exec, wheel_path, args.force_reinstall)
+    except subprocess.CalledProcessError as exc:
+        print("pip install failed.", file=sys.stderr)
+        sys.exit(exc.returncode)
+    except Exception as exc:
+        print(f"Installation failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
     try:
