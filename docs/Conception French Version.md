@@ -105,7 +105,7 @@ Ceci est implémenté comme une **fonction de filtrage** recevant les suggestion
 # Streamlit (UI minimale et claire)
 
 - Zone de texte large (entrée).
-- Bouton **“Améliorer”**.
+- Bouton **“Corriger”**.
 - **Sélecteur de mode** : **“Léger (règles)”** vs **“Intelligent (hybride)”**.
 - **Sélecteur de modèle LLM** (si « Intelligent ») : **Gemma3‑4B (~<4 Go RAM)** vs **Mistral‑7B Q4 (meilleure qualité)**.
 - **Barre de progression** pour téléchargement/chargement du modèle (cache local), et **profils** de **qualité/latence** (Rapide / Équilibré / Max Qualité).
@@ -225,7 +225,7 @@ Ceci est implémenté comme une **fonction de filtrage** recevant les suggestion
 # Livrables du MVP
 
 - **Installateur Windows (.exe)** avec tout embarqué (LT + JRE + spaCy + **serveur LLM** + **modèles** ou **téléchargement au premier lancement**).
-- Application **hors‑ligne** : coller du texte → “Améliorer” → voir **Diff** et **Texte final**.
+- Application **hors‑ligne** : coller du texte → “Corriger” → voir **Diff** et **Texte final**.
 - **Zéro dépendance externe** (ni Java ni Internet), hors téléchargement initial éventuel des modèles.
 - Code organisé pour **mode Léger** et **mode Intelligent (hybride)**, avec **sélection de modèle** et **fallback**.
 
