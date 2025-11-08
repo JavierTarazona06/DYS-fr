@@ -71,12 +71,12 @@ dys-fr/
 
 2. **Mode “Intelligent (hybride)”**
     1) **Pré‑passe (spaCy)** : tokenisation + NER → remplacer les entités par marqueurs.
-       Réf. : [huggingface (spaCy fr_core_news_md)](https://huggingface.co/spacy/fr_core_news_md?utm_source=chatgpt.com)
+       Réf. : [huggingface (spaCy fr_core_news_md)](https://huggingface.co/spacy/fr_core_news_md)
     2) **Contrôle rapide (LT)** : corrige erreurs grossières et génère des « pistes » pour le prompt.
-       Réf. : [LanguageTool dev](https://dev.languagetool.org/development-overview.html?utm_source=chatgpt.com)
+       Réf. : [LanguageTool dev](https://dev.languagetool.org/development-overview.html)
     3) **Réécriture (LLM)** : **Mistral‑7B Q4** (ou **Gemma3‑4B** si matériel juste) avec instructions « ne modifie pas les marqueurs/format ».
     4) **Post‑validation (LT)** : si les erreurs **augmentent vs. avant**, **dégrader** vers la sortie LT.
-       Réf. : [papier LT](https://www.danielnaber.de/languagetool/download/style_and_grammar_checker.pdf?utm_source=chatgpt.com)
+       Réf. : [papier LT](https://www.danielnaber.de/languagetool/download/style_and_grammar_checker.pdf)
     5) **Réinjection d’entités** puis rendu avec **explications** (messages de règles/guide de style).
 
     - **Sélection/Fallback** : par défaut **Mistral‑7B Q4** si RAM/VRAM suffisantes, sinon **Gemma3‑4B**. En cas d’échec/OOM/health KO du serveur LLM → **bascule automatique** vers Gemma3‑4B.
