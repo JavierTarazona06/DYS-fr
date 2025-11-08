@@ -13,7 +13,7 @@ Application locale (Streamlit) qui **reçoit du texte en français** et renvoie 
 - **LLM local (GGUF)** : **Mistral‑7B‑Instruct v0.3** quantifié (Q4) et **Gemma 3 4B**; sélection de modèle et bascule automatique vers Gemma si Mistral échoue. Service via **llama.cpp** (serveur HTTP) ou **llama‑cpp‑python** (CPU, offload GPU quand dispo).
 - **NER et analyse** (garde‑fous) : **spaCy `fr_core_news_md`**.
 - **UI** : **Streamlit** (rapide + stable) avec sélecteur « **Léger (règles)** / **Intelligent (hybride)** », barre de progression de téléchargement du modèle, cache et profils **qualité/latence**.
-- **Diff visuel** : **difflib** (standard Python) ou **google-diff-match-patch** (plus précis).
+- Fac. **Diff visuel** : **difflib** (standard Python) ou **google-diff-match-patch** (plus précis).
 - **Gestion des ressources** : détection matériel (RAM/VRAM), limites mémoire, et **offload GPU** quand présent. Les tableaux **GGUF** servent de guide RAM/VRAM.
 - **Packaging** : **PyInstaller** (exe) + **Inno Setup** (installateur .exe).
 - **Java embarqué** : **JRE** inclus dans l’installateur pour ne rien demander à l’utilisateur.
