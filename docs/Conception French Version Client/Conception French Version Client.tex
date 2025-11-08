@@ -42,7 +42,7 @@
 \noindent\rule{\linewidth}{0.4pt}
 
 \section{Résumé exécutif}
-\textbf{DYS-FR} est une application \textbf{100\,\% hors-ligne} qui clarifie et corrige des textes en français \textbf{sans ajouter d’informations}. Elle s’installe sur Windows en un clic et fonctionne sur des ordinateurs portables standards. L’utilisateur colle son texte, clique sur \textbf{«\,Corriger\,»}, puis visualise les \textbf{modifications} et le \textbf{texte final}.
+\textbf{DYS-FR} est une application \textbf{100\,\% hors-ligne} qui clarifie et corrige des textes en français \textbf{sans ajouter d’informations}. Elle empêche la triche : une phrase volontairement incomplète (« l’année de l’indépendance des États-Unis est le .. de .. ») reste non complétée. Elle s’installe sur Windows en un clic et fonctionne sur des ordinateurs portables standards. L’utilisateur colle son texte, clique sur \textbf{«\,Corriger\,»}, puis visualise les \textbf{modifications} et le \textbf{texte final}.
 
 \section{À qui s’adresse l’outil ?}
 \begin{itemize}
@@ -54,7 +54,8 @@
 \begin{itemize}
   \item \textbf{Confidentialité totale} : aucune donnée ne sort de l’ordinateur.
   \item \textbf{Simplicité} : interface claire, un bouton, résultat immédiat.
-  \item \textbf{Fiabilité} : corrections prudentes, \textbf{zéro invention} (noms, dates, chiffres préservés).
+  \item \textbf{Fiabilité} : corrections prudentes, 
+    \textbf{zéro invention} (noms, dates, chiffres préservés) et \textbf{anti-triche} (les zones «\,..\,» restent vides).
   \item \textbf{Accessibilité} : taille de police, interligne, \textbf{contraste élevé}.
 \end{itemize}
 
@@ -69,7 +70,7 @@
   \item Cliquer \textbf{«\,Corriger\,»}.
   \item Consulter :
   \begin{itemize}
-    \item \textbf{Diff} (changements en rouge/vert),
+    \item \textbf{Diff} (ajouts soulignés, suppressions barrées),
     \item \textbf{Texte final} (prêt à copier).
   \end{itemize}
 \end{enumerate}
@@ -100,7 +101,7 @@ L’application \textbf{détecte} les capacités de la machine et choisit le mod
 \section{Expérience \& accessibilité}
 \begin{itemize}
   \item Zone de texte large, bouton \textbf{«\,Corriger\,»}.
-  \item \textbf{Diff visuel} (avant/après).
+  \item \textbf{Diff visuel} (ajouts soulignés, suppressions barrées).
   \item Réglages : \textbf{taille de police}, interligne, contraste.
 \end{itemize}
 
@@ -150,7 +151,7 @@ L’application \textbf{détecte} les capacités de la machine et choisit le mod
 \begin{itemize}
   \item Écran unique : entrée $\rightarrow$ bouton $\rightarrow$ Diff / Résultat.
   \item Contrôles d’accessibilité de base.
-  \item Diff avec \texttt{difflib} / \texttt{diff-match-patch}.
+  \item Diff avec \texttt{difflib} / \texttt{diff-match-patch} configuré pour souligner les ajouts et barrer les suppressions.
 \end{itemize}
 
 \textbf{Phase 5 — Runner + Packaging (10--14 h)}
@@ -174,7 +175,8 @@ L’application \textbf{détecte} les capacités de la machine et choisit le mod
 \begin{itemize}
   \item Installation et ouverture en \textbf{1 clic}.
   \item Texte de 1--2 phrases corrigé en \textbf{$<$ 1 s} en mode \textbf{Léger}.
-  \item \textbf{Aucune invention} : chiffres/dates/noms identiques à l’original.
+  \item \textbf{Aucune invention / anti-triche} : chiffres/dates/noms identiques à l’original et phrases 
+    incomplètes («\,..\,» ou «\,…\,») non complétées.
   \item Changements visibles dans l’onglet \textbf{Diff}.
   \item Fonctionnement \textbf{hors-ligne} (aucun appel réseau).
 \end{itemize}

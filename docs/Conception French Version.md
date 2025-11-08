@@ -3,7 +3,7 @@
 
 # Objectif (MVP)
 
-Application locale (Streamlit) qui **reçoit du texte en français** et renvoie une version **corrigée/clarifiée** sans **ajout d’informations nouvelles**. Tout doit fonctionner **hors‑ligne**.
+Application locale (Streamlit) qui **reçoit du texte en français** et renvoie une version **corrigée/clarifiée** sans **ajout d’informations nouvelles**. Elle **empêche la triche** : une requête incomplète (« l’année de l’indépendance des États-Unis est le .. de .. ») reste volontairement inachevée. Tout doit fonctionner **hors‑ligne**.
 
 ---
 
@@ -13,7 +13,7 @@ Application locale (Streamlit) qui **reçoit du texte en français** et renvoie 
 - **LLM local (GGUF)** : **Mistral‑7B‑Instruct v0.3** quantifié (Q4) et **Gemma 3 4B**; sélection de modèle et bascule automatique vers Gemma si Mistral échoue. Service via **llama.cpp** (serveur HTTP) ou **llama‑cpp‑python** (CPU, offload GPU quand dispo).
 - **NER et analyse** (garde‑fous) : **spaCy `fr_core_news_md`**.
 - **UI** : **Streamlit** (rapide + stable) avec sélecteur « **Léger (règles)** / **Intelligent (hybride)** », barre de progression de téléchargement du modèle, cache et profils **qualité/latence**.
-- Fac. **Diff visuel** : **difflib** (standard Python) ou **google-diff-match-patch** (plus précis).
+- Fac. **Diff visuel** : **difflib** (standard Python) ou **google-diff-match-patch** (plus précis) configuré pour souligner les ajouts et barrer les suppressions.
 - **Gestion des ressources** : détection matériel (RAM/VRAM), limites mémoire, et **offload GPU** quand présent. Les tableaux **GGUF** servent de guide RAM/VRAM.
 - **Packaging** : **PyInstaller** (exe) + **Inno Setup** (installateur .exe).
 - **Java embarqué** : **JRE** inclus dans l’installateur pour ne rien demander à l’utilisateur.
@@ -81,7 +81,7 @@ dys-fr/
 
     - **Sélection/Fallback** : par défaut **Mistral‑7B Q4** si RAM/VRAM suffisantes, sinon **Gemma3‑4B**. En cas d’échec/OOM/health KO du serveur LLM → **bascule automatique** vers Gemma3‑4B.
 
-**Diff** : montre les changements avec `difflib` (ou `diff-match-patch`).
+**Diff** : montre les changements avec `difflib` (ou `diff-match-patch`) en soulignant le texte ajouté et en barrant le texte supprimé.
 
 ---
 
@@ -95,6 +95,7 @@ dys-fr/
     - Ne créent pas de **nouvelles entités** ni de **PROPN**.
     - N’augmentent pas de plus de **N tokens** (ex. N=1) une phrase donnée.
     - Sont dans une **liste blanche** courte (articles, prépositions, contractions, signes).
+    - Empêchent la **triche** : si le texte réclame une information manquante (ex. « l’année de l’indépendance des États-Unis est le .. de .. »), la sortie n’invente pas de réponse.
 
 Pour la réécriture LLM, le prompt impose explicitement « ne **modifie pas** les marqueurs/format et **n’ajoute aucune information** ». Un **garde‑fou de dégradation** s’applique : si le score d’erreurs LT post‑LLM > pré‑LLM, on **revient** à la sortie LT.
 
@@ -109,7 +110,7 @@ Ceci est implémenté comme une **fonction de filtrage** recevant les suggestion
 - **Sélecteur de mode** : **“Léger (règles)”** vs **“Intelligent (hybride)”**.
 - **Sélecteur de modèle LLM** (si « Intelligent ») : **Gemma3‑4B (~<4 Go RAM)** vs **Mistral‑7B Q4 (meilleure qualité)**.
 - **Barre de progression** pour téléchargement/chargement du modèle (cache local), et **profils** de **qualité/latence** (Rapide / Équilibré / Max Qualité).
-- Onglets : **“Diff”** (rouge/vert) et **“Texte final”**.
+- Onglets : **“Diff”** (ajouts soulignés, suppressions barrées) et **“Texte final”**.
 - Contrôles : taille de police, interligne, contraste élevé (option de thème).
 - Étiquette “hors‑ligne / aucune donnée envoyée”.
 
@@ -166,6 +167,7 @@ Ceci est implémenté comme une **fonction de filtrage** recevant les suggestion
     - Entrée sans nombres/dates/entités → sortie identique.
     - Noms propres présents → jamais inventer ni modifier.
     - Phrases courtes → ne pas allonger avec des connecteurs inventés.
+    - Requêtes incomplètes utilisées pour **tricher** (« l’année de l’indépendance des États-Unis est le .. de .. ») → la sortie reste incomplète.
 - **Hybride** : vérifie que les **marqueurs d’entités** ne sont jamais altérés par le LLM; si le score LT **augmente** après LLM, on **dégrade** vers LT; **fallback** vers Gemma3‑4B testé (simule OOM).
 - **Performance** : < 1 s pour 1–2 phrases (mode Léger) et budget mesuré pour **chargement modèle** + **latence LLM** (barre de progression).
 
@@ -199,7 +201,7 @@ Ceci est implémenté comme une **fonction de filtrage** recevant les suggestion
 
 - Écran unique : entrée → bouton → Diff / Résultat.
 - Contrôles d’accessibilité de base.
-- Diff avec `difflib` / `diff-match-patch`.
+- Diff avec `difflib` / `diff-match-patch` configuré pour souligner les ajouts et barrer les suppressions.
 
 **Phase 5 – Runner + Packaging (10–14 h)**
 
