@@ -14,3 +14,4 @@ spacy:
   model: fr_core_news_md
   only_ner_pos: true
   target_dir: resources/spacy
+  add_date_ruler: true
