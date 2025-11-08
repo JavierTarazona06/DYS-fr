@@ -210,3 +210,5 @@ __marimo__/
 # Others
 *.pdf
 *.xlsx
+.vscode/
+resources/
