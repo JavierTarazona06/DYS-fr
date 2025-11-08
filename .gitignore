@@ -201,6 +201,38 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# LaTeX
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.dvi
+*.fdb_latexmk
+*.fls
+*.fmt
+*.fot
+*.glg
+*.glo
+*.gls
+*.ist
+*.lof
+*.log
+*.lot
+*.nav
+*.out
+*.pdfsync
+*.run.xml
+*.snm
+*.synctex(busy)
+*.synctex.gz
+*.toc
+*.vrb
+*.xdv
+*_latexmk
+*.synctex.gz(busy)
+_minted-*/
+texput.log
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
@@ -210,8 +242,8 @@ __marimo__/
 # Others
 *.pdf
 *.xlsx
-
-
 LanguageTool-6.7/
 .venv
 languagetool/
+.vscode/
+resources/
