@@ -1,4 +1,5 @@
-# Setup & Run (Markdown)
+# LanguageTool Installation
+Setup & Run (Markdown)
 
 ## Prerequisites
 
