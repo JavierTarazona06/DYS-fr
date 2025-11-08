@@ -216,3 +216,4 @@ LanguageTool-6.7/
 .venv
 languagetool/
 resources/
+.vscode/
