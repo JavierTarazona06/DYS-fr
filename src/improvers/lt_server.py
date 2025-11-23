@@ -4,13 +4,14 @@ import urllib.request
 
 class LanguageToolServer(contextlib.AbstractContextManager):
     def __init__(self, host: str, port: int, jre_bin: str, jar_path: str,
-                 allow_origin: str = "*", heap_mb: int = 256):
+                 allow_origin: str = "*", heap_mb: int = 256, lt_args: list[str] | None = None):
         self.host = host
         self.port = int(port)
         self.jre_bin = jre_bin
         self.jar_path = Path(jar_path)
         self.allow_origin = allow_origin
         self.heap_mb = int(heap_mb)
+        self.lt_args = lt_args if lt_args is not None else [] # Initialize lt_args
         self.proc: subprocess.Popen | None = None
 
     @property
@@ -65,7 +66,7 @@ class LanguageToolServer(contextlib.AbstractContextManager):
             "-l", "fr",                     # okay to keep; server ignores unknown flags gracefully
             "-p", str(self.port),
             "--allow-origin", self.allow_origin,
-        ]
+        ] + self.lt_args # Append custom LanguageTool arguments
 
         env = os.environ.copy()
         # Only set JAVA_HOME if using an embedded JRE path (not when jre_bin == "java")
