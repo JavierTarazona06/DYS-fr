@@ -14,7 +14,8 @@ def main():
         jre_bin=lt_cfg["jre_bin"],
         jar_path=lt_cfg["jar_path"],
         allow_origin=lt_cfg.get("allow_origin", "*"),
-        heap_mb=int(lt_cfg.get("heap_mb", 256))
+        heap_mb=int(lt_cfg.get("heap_mb", 256)),
+        lt_args=["--config", "level=picky"] # This is correct for the server process
     ) as srv:
         env = os.environ.copy()
         env["LT_URL"] = srv.url
