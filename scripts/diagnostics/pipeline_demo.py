@@ -13,7 +13,7 @@ from src.guardrails.entities import mask_entities, reinject_entities
 from src.improvers.lt_server import LanguageToolServer
 from src.improvers.lt_improver import LTImprover
 
-TEXT = "Ce jrou, le 12 janvier 2024, Marie Dubois ont visité Paris."
+TEXT = "Ce juor, le 12 janvier 2024, Marie Dampan ont visité Paris."
 
 
 def main() -> None:
