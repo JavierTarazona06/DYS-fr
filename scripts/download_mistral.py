@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Download Mistral-7B-Instruct v0.3 Q4_K_M model from Hugging Face.
-This script works on any machine with Python and internet connection.
+Alternative download script for Mistral-7B-Instruct v0.3 Q4_K_M.
+Uses bartowski's repository which is more reliable.
 """
 
-import os
 import sys
 import subprocess
-import platform
 from pathlib import Path
-from urllib.request import urlretrieve
+from urllib.request import urlretrieve, Request, urlopen
+from urllib.error import URLError, HTTPError
 
 
 def download_with_progress(url: str, destination: Path):
@@ -29,159 +28,78 @@ def download_with_progress(url: str, destination: Path):
             print(f'\r[{bar}] {percent:.1f}% ({downloaded_mb:.1f}/{total_mb:.1f} MB)', end='', flush=True)
     
     print(f"Downloading to: {destination}")
-    urlretrieve(url, destination, reporthook=report_progress)
-    print()  # New line after progress
-
-
-def get_python_version():
-    """Get Python version in format like '3.12', '3.11', etc."""
-    version_info = sys.version_info
-    return f"{version_info.major}.{version_info.minor}"
-
-
-def get_llama_cpp_wheel_url():
-    """Get the appropriate wheel URL for llama-cpp-python from GitHub Releases."""
-    python_version = get_python_version()
-    system = platform.system()
     
-    # Map Python version to wheel version code
-    version_map = {
-        "3.11": "cp311",
-        "3.12": "cp312",
-        "3.10": "cp310",
-    }
+    # Add headers to avoid 403 errors
+    req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
     
-    cp_version = version_map.get(python_version)
-    if not cp_version:
-        return None
-    
-    # For Windows x64
-    if system == "Windows":
-        wheel_filename = f"llama_cpp_python-0.3.2-{cp_version}-{cp_version}-win_amd64.whl"
-        wheel_url = f"https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.2/{wheel_filename}"
-        return wheel_url
-    
-    # Add other platforms if needed (Linux, macOS)
-    return None
-
-
-def install_llama_cpp_python():
-    """Attempt to install llama-cpp-python using pre-built wheel from GitHub."""
-    print(f"\n{'='*60}")
-    print("Installing llama-cpp-python")
-    print(f"{'='*60}")
-    
-    python_version = get_python_version()
-    print(f"Detected Python version: {python_version}")
-    print(f"Platform: {platform.system()}")
-    
-    # Try using wheel from GitHub Releases
-    wheel_url = get_llama_cpp_wheel_url()
-    
-    if wheel_url:
-        print(f"\nOption 1: Using pre-built wheel from GitHub Releases")
-        print(f"URL: {wheel_url}")
-        response = input("\nTry this installation method? (Y/n): ").strip().lower()
-        
-        if response in ['', 'y', 'yes']:
-            try:
-                print("\nInstalling from wheel...")
-                result = subprocess.run(
-                    [sys.executable, "-m", "pip", "install", wheel_url],
-                    capture_output=True,
-                    text=True
-                )
-                
-                if result.returncode == 0:
-                    print("✓ Installation successful!")
-                    return True
-                else:
-                    print(f"✗ Installation failed: {result.stderr}")
-                    print("\nTrying alternative method...")
-            except Exception as e:
-                print(f"✗ Error: {e}")
-                print("\nTrying alternative method...")
-    
-    # Fallback to standard pip install
-    print(f"\nOption 2: Standard pip installation with pre-built binary")
-    response = input("Try standard installation? (Y/n): ").strip().lower()
-    
-    if response in ['', 'y', 'yes']:
-        try:
-            print("\nInstalling llama-cpp-python...")
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "llama-cpp-python", "--prefer-binary"],
-                capture_output=True,
-                text=True
-            )
-            
-            if result.returncode == 0:
-                print("✓ Installation successful!")
-                return True
-            else:
-                print(f"✗ Installation failed: {result.stderr}")
-        except Exception as e:
-            print(f"✗ Error: {e}")
-    
-    print("\n" + "="*60)
-    print("MANUAL INSTALLATION INSTRUCTIONS:")
-    print("="*60)
-    print("For Python 3.12, Windows x64:")
-    print("pip install https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.2/llama_cpp_python-0.3.2-cp312-cp312-win_amd64.whl")
-    print("\nFor Python 3.11, Windows x64:")
-    print("pip install https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.2/llama_cpp_python-0.3.2-cp311-cp311-win_amd64.whl")
-    print("\nOr use standard installation:")
-    print("pip install llama-cpp-python --prefer-binary")
-    print("="*60 + "\n")
-    
-    return False
-
-
-def download_with_huggingface_hub(repo_id: str, filename: str, local_dir: Path):
-    """Download using huggingface_hub library."""
     try:
-        from huggingface_hub import hf_hub_download
+        with urlopen(req) as response:
+            total_size = int(response.headers.get('Content-Length', 0))
+            
+            with open(destination, 'wb') as out_file:
+                block_size = 8192
+                downloaded = 0
+                
+                while True:
+                    buffer = response.read(block_size)
+                    if not buffer:
+                        break
+                    
+                    out_file.write(buffer)
+                    downloaded += len(buffer)
+                    
+                    if total_size > 0:
+                        percent = min(100, downloaded * 100 / total_size)
+                        downloaded_mb = downloaded / (1024 * 1024)
+                        total_mb = total_size / (1024 * 1024)
+                        
+                        bar_length = 50
+                        filled = int(bar_length * percent / 100)
+                        bar = '█' * filled + '░' * (bar_length - filled)
+                        
+                        print(f'\r[{bar}] {percent:.1f}% ({downloaded_mb:.1f}/{total_mb:.1f} MB)', end='', flush=True)
         
-        print("Using huggingface_hub for download...")
-        local_dir.mkdir(parents=True, exist_ok=True)
+        print()  # New line after progress
         
-        file_path = hf_hub_download(
-            repo_id=repo_id,
-            filename=filename,
-            local_dir=str(local_dir),
-            local_dir_use_symlinks=False
+    except (URLError, HTTPError) as e:
+        raise Exception(f"Download failed: {e}")
+
+
+def run_test_script():
+    """Run the test script to verify the model works."""
+    test_script = Path(__file__).parent / "test_mistral.py"
+    
+    if not test_script.exists():
+        print(f"\n⚠ Warning: Test script not found at {test_script}")
+        return False
+    
+    print(f"\n{'='*70}")
+    print("Running model verification test...")
+    print(f"{'='*70}\n")
+    
+    try:
+        result = subprocess.run(
+            [sys.executable, str(test_script)],
+            capture_output=False,
+            text=True,
+            check=True
         )
-        return file_path
-    except ImportError:
-        print("✗ huggingface_hub not installed")
-        print("\nInstalling huggingface_hub...")
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "huggingface_hub"],
-                check=True,
-                capture_output=True
-            )
-            print("✓ huggingface_hub installed successfully")
-            return download_with_huggingface_hub(repo_id, filename, local_dir)
-        except Exception as e:
-            print(f"✗ Failed to install huggingface_hub: {e}")
-            return None
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"\n✗ Test failed with exit code {e.returncode}")
+        return False
     except Exception as e:
-        print(f"✗ Download failed: {e}")
-        return None
+        print(f"\n✗ Test failed: {e}")
+        return False
 
 
 def main():
-    # Configuration - Using alternative repository that's publicly accessible
-    # Option 1: bartowski's quantized models (more recent and accessible)
+    # Configuration - using bartowski's repository (more reliable)
     REPO_ID = "bartowski/Mistral-7B-Instruct-v0.3-GGUF"
     FILENAME = "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"
     
-    # Option 2: If bartowski doesn't work, try MaziyarPanahi
-    FALLBACK_REPO = "MaziyarPanahi/Mistral-7B-Instruct-v0.3-GGUF"
-    FALLBACK_FILENAME = "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
-    
-    BASE_URL = "https://huggingface.co"
+    # Direct download URL from Hugging Face
+    DOWNLOAD_URL = f"https://huggingface.co/{REPO_ID}/resolve/main/{FILENAME}"
     
     # Local directory
     script_dir = Path(__file__).parent.parent
@@ -202,82 +120,115 @@ def main():
             return str(model_path)
     
     # Download
-    print(f"\n{'='*60}")
+    print(f"\n{'='*70}")
     print(f"Downloading Mistral-7B-Instruct v0.3 Q4_K_M")
-    print(f"{'='*60}")
-    print(f"From: {REPO_ID}")
+    print(f"{'='*70}")
+    print(f"Repository: {REPO_ID}")
     print(f"File: {FILENAME}")
     print(f"Size: ~4.37 GB")
-    print(f"{'='*60}\n")
+    print(f"URL: {DOWNLOAD_URL}")
+    print(f"{'='*70}\n")
     
-    # Try using huggingface_hub first (most reliable method)
-    print("Method 1: Using huggingface_hub library (recommended)")
-    downloaded_path = download_with_huggingface_hub(REPO_ID, FILENAME, models_dir)
-    
-    if downloaded_path:
-        file_size_mb = Path(downloaded_path).stat().st_size / (1024 * 1024)
+    try:
+        download_with_progress(DOWNLOAD_URL, model_path)
+        
+        # Verify download
+        file_size_mb = model_path.stat().st_size / (1024 * 1024)
+        file_size_gb = file_size_mb / 1024
+        
         print(f"\n✓ Download complete!")
-        print(f"  Location: {downloaded_path}")
-        print(f"  Size: {file_size_mb:.1f} MB")
-        return str(downloaded_path)
-    
-    # Try fallback repository
-    print(f"\nTrying fallback repository: {FALLBACK_REPO}")
-    fallback_path = models_dir / FALLBACK_FILENAME
-    downloaded_path = download_with_huggingface_hub(FALLBACK_REPO, FALLBACK_FILENAME, models_dir)
-    
-    if downloaded_path:
-        file_size_mb = Path(downloaded_path).stat().st_size / (1024 * 1024)
-        print(f"\n✓ Download complete!")
-        print(f"  Location: {downloaded_path}")
-        print(f"  Size: {file_size_mb:.1f} MB")
-        return str(downloaded_path)
-    
-    # If all methods failed, show manual instructions
-    print(f"\n\n✗ Automatic download failed!")
-    print("\n" + "="*60)
-    print("MANUAL DOWNLOAD INSTRUCTIONS:")
-    print("="*60)
-    print(f"Option 1: Using huggingface-cli")
-    print(f"   huggingface-cli download {REPO_ID} {FILENAME} --local-dir {models_dir}")
-    print(f"\nOption 2: Browser download")
-    print(f"   1. Visit: {BASE_URL}/{REPO_ID}")
-    print(f"   2. Click 'Files and versions' tab")
-    print(f"   3. Download: {FILENAME}")
-    print(f"   4. Move to: {models_dir}")
-    print(f"\nOption 3: Try alternative repository")
-    print(f"   huggingface-cli download {FALLBACK_REPO} {FALLBACK_FILENAME} --local-dir {models_dir}")
-    print("="*60 + "\n")
-    
-    sys.exit(1)
+        print(f"  Location: {model_path}")
+        print(f"  Size: {file_size_mb:.1f} MB ({file_size_gb:.2f} GB)")
+        
+        # Verify file size is reasonable (should be around 4.37 GB)
+        if file_size_gb < 4.0 or file_size_gb > 5.0:
+            print(f"\n⚠ Warning: File size seems incorrect (expected ~4.37 GB)")
+            print(f"  The download may be incomplete or corrupted.")
+            response = input("\nDo you want to keep this file? (y/N): ").strip().lower()
+            if response not in ['y', 'yes']:
+                model_path.unlink()
+                print(f"  Removed file: {model_path}")
+                sys.exit(1)
+        
+        return str(model_path)
+        
+    except KeyboardInterrupt:
+        print("\n\n✗ Download cancelled by user")
+        if model_path.exists():
+            model_path.unlink()
+            print(f"  Removed incomplete file: {model_path}")
+        sys.exit(1)
+        
+    except Exception as e:
+        print(f"\n\n✗ Download failed: {e}")
+        print("\n" + "="*70)
+        print("ALTERNATIVE DOWNLOAD METHODS:")
+        print("="*70)
+        
+        print("\n1. Manual Download:")
+        print(f"   a) Visit: https://huggingface.co/{REPO_ID}/tree/main")
+        print(f"   b) Find and click on: {FILENAME}")
+        print(f"   c) Click the download button (⬇)")
+        print(f"   d) Move the file to: {models_dir}")
+        
+        print("\n2. Using huggingface-cli:")
+        print("   pip install huggingface-hub")
+        print(f"   huggingface-cli download {REPO_ID} {FILENAME} \\")
+        print(f"       --local-dir {models_dir} --local-dir-use-symlinks False")
+        
+        print("\n3. Using wget (if installed):")
+        print(f"   wget {DOWNLOAD_URL} -O {model_path}")
+        
+        print("\n4. Using curl (if installed):")
+        print(f"   curl -L {DOWNLOAD_URL} -o {model_path}")
+        
+        print("="*70 + "\n")
+        
+        if model_path.exists():
+            model_path.unlink()
+            print(f"Removed incomplete file: {model_path}\n")
+        
+        sys.exit(1)
 
 
 if __name__ == "__main__":
     model_path = main()
-    print(f"\n{'='*60}")
-    print("Next steps:")
-    print(f"{'='*60}")
     
-    # Ask if user wants to install llama-cpp-python
-    response = input("\nDo you want to install llama-cpp-python now? (Y/n): ").strip().lower()
+    print(f"\n{'='*70}")
+    print("NEXT STEPS:")
+    print(f"{'='*70}")
+    
+    # Ask if user wants to run the test
+    response = input("\nDo you want to test the model now? (Y/n): ").strip().lower()
     
     if response in ['', 'y', 'yes']:
-        success = install_llama_cpp_python()
-        if success:
-            print("\n✓ Setup complete!")
-            print("\nYou can now test the model:")
-            print("   python scripts/test_mistral.py")
+        test_passed = run_test_script()
+        
+        if test_passed:
+            print(f"\n{'='*70}")
+            print("✓ Model verification successful!")
+            print(f"{'='*70}")
+            print("\nFinal steps:")
+            print("1. Enable hybrid mode in config.yaml:")
+            print("   improver: hybrid  # Change from 'lt' to 'hybrid'")
+            print("\n2. Run the application:")
+            print("   python runner.py")
+            print(f"{'='*70}\n")
         else:
-            print("\n⚠ Please install llama-cpp-python manually before testing.")
+            print(f"\n{'='*70}")
+            print("Model test failed. Please check:")
+            print("1. llama-cpp-python is installed:")
+            print("   pip install llama-cpp-python==0.2.90 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu")
+            print("\n2. Run test manually:")
+            print("   python scripts/test_mistral.py")
+            print(f"{'='*70}\n")
     else:
-        print("\n1. Install llama-cpp-python:")
-        print("   pip install llama-cpp-python --prefer-binary")
-        print("\n   Or use pre-built wheel:")
-        python_version = get_python_version()
-        wheel_url = get_llama_cpp_wheel_url()
-        if wheel_url:
-            print(f"   pip install {wheel_url}")
-        print("\n2. Test the model:")
+        print("\n1. Verify the model works:")
         print("   python scripts/test_mistral.py")
-    
-    print(f"{'='*60}\n")
+        print("\n2. If llama-cpp-python is not installed:")
+        print("   pip install llama-cpp-python==0.2.90 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu")
+        print("\n3. Enable hybrid mode in config.yaml:")
+        print("   improver: hybrid  # Change from 'lt' to 'hybrid'")
+        print("\n4. Run the application:")
+        print("   python runner.py")
+        print(f"{'='*70}\n")
