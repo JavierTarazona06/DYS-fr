@@ -64,7 +64,7 @@ Règles strictes:
 3. N'ajoute AUCUNE information manquante (laisse les "..." et "..")
 4. Corrige uniquement l'orthographe et ponctuation
 5. Corrige uniquement la grammaire de base (accords, temps verbaux, articles).
-6. Remplacer les phrases trop longues, si ils sont des formulations très complexes, par d’autres équivalentes mais plus simples.
+6. Remplacer les phrases trop longues, si ils sont des formulations très complexes, par d'autres équivalentes mais plus simples.
 
 Erreurs détectées par LanguageTool:
 {hints_str}
