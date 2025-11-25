@@ -17,10 +17,10 @@ llm:
   models_dir: resources/models
   
   mistral:
-    filename: mistral-7b-instruct-v0.3.Q4_K_M.gguf
+    filename: Mistral-7B-Instruct-v0.3-Q4_K_M.gguf
     n_ctx: 4096 # maximum context length
     max_tokens: 512 # maximum tokens to generate
-    temperature: 0.3 # sampling temperature, like creativity
+    temperature: 0.5 # sampling temperature, like creativity
     
   gemma:
     filename: gemma-3-4b-instruct-Q4_K_M.gguf

@@ -13,7 +13,25 @@ This guide explains how to install and configure Mistral-7B-Instruct v0.3 (Q4_K_
 
 ## Installation Steps
 
-### 1. Download the Model
+### 1. Install llama-cpp-python
+
+**Option A: Install from requirements.txt (Recommended)**
+
+```bash
+pip install -r requirements.txt
+```
+
+**Option B: Install Directly**
+
+```bash
+pip install llama-cpp-python==0.2.90 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+```
+
+This installs a precompiled CPU-only version (no compilation needed).
+
+---
+
+### 2. Download the Model
 
 **Option A: Automated Download (Recommended)**
 
@@ -30,24 +48,6 @@ This will download `mistral-7b-instruct-v0.3.Q4_K_M.gguf` (~4.37 GB) to `resourc
 1. Visit: https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/tree/main
 2. Find and download: `Mistral-7B-Instruct-v0.3-Q4_K_M.gguf`
 3. Move the file to: `resources/models/`
-
----
-
-### 2. Install llama-cpp-python
-
-**Option A: Install from requirements.txt (Recommended)**
-
-```bash
-pip install -r requirements.txt
-```
-
-**Option B: Install Directly**
-
-```bash
-pip install llama-cpp-python==0.2.90 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-```
-
-This installs a precompiled CPU-only version (no compilation needed).
 
 ---
 

@@ -14,6 +14,7 @@ from src.improvers.lt_server import LanguageToolServer
 from src.improvers.lt_improver import LTImprover
 
 TEXT = "Ce juor, le 12 janvier 2024, Marie Dampan ont visité Paris."
+# Je suis allé au supermarché pour achète du pin et des lais, mets la caissière à fermer la caisse à 18h et j'ai dû rentrer sans rien.
 
 
 def main() -> None:
