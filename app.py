@@ -54,8 +54,6 @@ if st.button(Content.BTN_CORRECT, type="primary"):
     else:
         with st.spinner("🔄 Correction en cours..."):
             # Run improvement
-            # We assume Hybrid mode implies debug=False for production feel, 
-            # but you can add a debug toggle in sidebar if needed.
             is_hybrid = (mode == Content.MODE_HYBRID)
             out = improver.improve(text)
         
