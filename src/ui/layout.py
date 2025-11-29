@@ -23,7 +23,7 @@ def render_sidebar():
         model_choice_label = st.sidebar.radio(
             "Modèle IA",
             ["Mistral 7B (Local GGUF)", "Gemma 3 (Ollama)"],
-            index=1, # Default to Gemma if you prefer
+            index=1, # Default to Gemma
             help="Mistral tourne dans l'app. Gemma nécessite Ollama installé."
         )
         
@@ -34,6 +34,12 @@ def render_sidebar():
             model_choice = "mistral"
     
     st.sidebar.markdown("---")
+    
+    # --- RESTORED SECTION ---
+    st.sidebar.markdown(Content.ABOUT_TITLE)
+    st.sidebar.markdown(Content.ABOUT_TEXT)
+    # ------------------------
+    
     return mode, model_choice
 
 def render_diff_view(original: str, corrected: str):
