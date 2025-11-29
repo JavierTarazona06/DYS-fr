@@ -16,13 +16,24 @@ def render_sidebar():
         help=Content.MODE_HELP
     )
     
-    # Only show model selector if in Hybrid mode (We will add the selector logic here later)
-    model_choice = "mistral" # Default for now
+    model_choice = "mistral" # Default
+    
+    # SHOW SELECTOR IF HYBRID
+    if mode == Content.MODE_HYBRID:
+        model_choice_label = st.sidebar.radio(
+            "Modèle IA",
+            ["Mistral 7B (Local GGUF)", "Gemma 3 (Ollama)"],
+            index=1, # Default to Gemma if you prefer
+            help="Mistral tourne dans l'app. Gemma nécessite Ollama installé."
+        )
+        
+        # Map label to config key
+        if "Gemma" in model_choice_label:
+            model_choice = "gemma"
+        else:
+            model_choice = "mistral"
     
     st.sidebar.markdown("---")
-    st.sidebar.markdown(Content.ABOUT_TITLE)
-    st.sidebar.markdown(Content.ABOUT_TEXT)
-    
     return mode, model_choice
 
 def render_diff_view(original: str, corrected: str):

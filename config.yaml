@@ -23,10 +23,9 @@ llm:
     temperature: 0.5 # sampling temperature, like creativity
     
   gemma:
-    filename: gemma-3-4b-instruct-Q4_K_M.gguf
-    n_ctx: 4096
-    max_tokens: 512
-    temperature: 0.3
+    model_name: "gemma3:4b"  # Must match 'ollama list' -> ollama list
+    timeout: 120
+    temperature: 0.1
 
 spacy:
   model: fr_core_news_md
