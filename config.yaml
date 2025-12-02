@@ -18,8 +18,8 @@ llm:
   
   mistral:
     filename: Mistral-7B-Instruct-v0.3-Q4_K_M.gguf
-    n_ctx: 2048 # Reduced: DYS texts rarely >500 tokens, saves RAM and speeds up loading
-    max_tokens: 256 # Reduced: brief corrections, faster response
+    n_ctx: 4096 # Reduced: DYS texts rarely >500 tokens, saves RAM and speeds up loading
+    max_tokens: 526 # Reduced: brief corrections, faster response
     temperature: 0.3 # Reduced: more conservative, less unnecessary creativity
     
   gemma:

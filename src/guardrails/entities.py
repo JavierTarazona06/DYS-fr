@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Tuple
+import re
 
 from spacy.tokens import Doc, Span, Token
 
@@ -19,6 +20,9 @@ LOWERCASE_PARTICLES = {
     "del",
     "der",
 }
+
+# Pattern to detect standalone years (e.g., 2024, 1789)
+YEAR_PATTERN = re.compile(r'\b(1[0-9]{3}|20[0-9]{2})\b')
 
 
 def _is_title_like(token: Token) -> bool:
@@ -71,23 +75,49 @@ def mask_entities(doc: Doc) -> Tuple[str, List[MaskedEntity]]:
 
     Person entities that do not look like proper names are left intact so that
     downstream tools can still fix typos.
+    
+    Also detects standalone years (e.g., 2024) that spaCy might have missed.
     """
+    # First, collect spaCy entities
+    ents_to_mask = []
+    for ent in doc.ents:
+        if _should_mask_entity(ent):
+            ents_to_mask.append((ent.start_char, ent.end_char, ent.label_, ent.text))
+    
+    # Then, detect standalone years that spaCy missed
+    text = doc.text
+    for match in YEAR_PATTERN.finditer(text):
+        year_start, year_end = match.span()
+        year_text = match.group()
+        
+        # Check if this year is already covered by a spaCy entity
+        overlap = False
+        for ent_start, ent_end, _, _ in ents_to_mask:
+            if not (year_end <= ent_start or year_start >= ent_end):
+                overlap = True
+                break
+        
+        if not overlap:
+            ents_to_mask.append((year_start, year_end, "DATE", year_text))
+    
+    # Sort by start position to process in order
+    ents_to_mask.sort(key=lambda e: e[0])
+    
+    # Build masked text
     pieces: List[str] = []
     last = 0
     masked: List[MaskedEntity] = []
-    for ent in doc.ents:
-        pieces.append(doc.text[last:ent.start_char])
-        if not _should_mask_entity(ent):
-            pieces.append(ent.text)
-            last = ent.end_char
-            continue
-        placeholder = f"ENT_{len(masked)}_{ent.label_}"
+    
+    for start_char, end_char, label, text_val in ents_to_mask:
+        pieces.append(text[last:start_char])
+        placeholder = f"ENT_{len(masked)}_{label}"
         pieces.append(placeholder)
         masked.append(
-            MaskedEntity(placeholder, ent.label_, ent.start_char, ent.end_char, ent.text)
+            MaskedEntity(placeholder, label, start_char, end_char, text_val)
         )
-        last = ent.end_char
-    pieces.append(doc.text[last:])
+        last = end_char
+    
+    pieces.append(text[last:])
     return "".join(pieces), masked
 
 

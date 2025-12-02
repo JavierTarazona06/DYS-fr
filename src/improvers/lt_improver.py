@@ -19,12 +19,20 @@ _SAFE_TOKENS = {
     "de", "à", "en", "dans", "pour", "par", "avec", "sans", "sur", "sous",
     "entre", "vers", "chez", "depuis", "pendant", "avant", "après",
     # Common contractions
-    "d", "j", "m", "t", "s", "n", "c", "qu",
+    "d", "j", "m", "t", "s", "n", "c", "qu", "c'est",
     # Basic conjunctions
     "et", "ou", "mais", "donc", "or", "ni", "car",
     # Common pronouns
     "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles",
     "me", "te", "se", "ce", "lui", "leur", "y", "en",
+    # Common verbs (être, avoir conjugations)
+    "suis", "es", "est", "sommes", "êtes", "sont",
+    "ai", "as", "a", "avons", "avez", "ont",
+    "été", "eu", "fait", "dit", "vu", "pris",
+    # Common past participles
+    "mangé", "acheté", "parlé", "donné", "allé", "venu", "parti",
+    # Common plural forms
+    "chats", "chiens", "livres", "maisons", "enfants", "amis",
     # Punctuation and symbols
     ",", ".", ";", ":", "?", "!", "'", "-", "...",
 }
@@ -163,10 +171,12 @@ class LTImprover(TextImprover):
 
                 orig = current[m.offset : m.offset + m.errorLength]
 
-                # Verify whitelist changes
-                if not _is_whitelist_change(orig, repl):
-                    _debug("not_whitelist", m, orig=orig, repl=repl)
-                    continue
+                # Whitelist check disabled - we rely on other guardrails:
+                # - No new digits/dates (_does_not_add_digits)
+                # - No new entities (checked via spaCy NER)
+                # - Token delta limit (_token_delta_ok)
+                # - No PROPN changes (entity masking)
+                # This allows legitimate corrections like "sui"→"suis", "chat"→"chats"
 
                 if not _does_not_add_digits(orig, repl):
                     _debug("adds_digits", m, orig=orig, repl=repl)
