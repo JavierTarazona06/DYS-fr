@@ -49,6 +49,7 @@ class LLMImprover(TextImprover):
             n_threads=n_threads or os.cpu_count(),
             n_gpu_layers=0,  # CPU only
             use_mlock=True,  # Keep model in RAM
+            use_mmap=True,  # Memory-map model file (faster load on SSD)
             verbose=False,
         )
     
