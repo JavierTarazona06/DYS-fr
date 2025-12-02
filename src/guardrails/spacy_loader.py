@@ -63,7 +63,7 @@ def load_french_nlp(
     model: str | Path,
     *,
     only_ner_pos: bool = True,
-    add_date_ruler: bool = False,
+    add_date_ruler: bool = True,
 ) -> Language:
     """
     Load spaCy FR with a lightweight configuration for guardrails.
