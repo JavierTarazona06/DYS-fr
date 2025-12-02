@@ -55,34 +55,59 @@ class LLMImprover(TextImprover):
     
     def _build_prompt(self, text: str, lt_hints: list[str]) -> str:
         """Build instruction prompt for Mistral."""
-        hints_str = "\n".join(f"- {h}" for h in lt_hints[:5]) if lt_hints else "Aucune."
+        hints_str = "\n".join(f"- {h}" for h in lt_hints) if lt_hints else "Aucune."
         
-        return f"""[INST] Corrige UNIQUEMENT les fautes d'orthographe et de grammaire. Ne change PAS le sens du texte.
-
-INTERDICTIONS STRICTES:
-- Ne JAMAIS changer le sens des verbes (aller reste aller, pas "veux aller")
-- Ne JAMAIS remplacer les mots par des synonymes
-- Ne JAMAIS ajouter de mots qui n'existent pas dans l'original
-- Ne JAMAIS modifier les marqueurs ENT_X_Y
-
-CORRECTIONS AUTORISÉES:
-- Orthographe
-- Conjugaison
-- Accords: genre, nombre, articles
-- Ponctuation: apostrophes, virgules
-
-Erreurs détectées:
-{hints_str}
-
-Texte original:
+        # Prompt ultra-simplificado para textos muy cortos (evita cortes prematuros)
+        if len(text.split()) <= 3:
+            return f"""[INST]Corrige strictement le texte ci-dessous en français :
 {text}
 
-Texte corrigé (MÊME sens, MÊMES mots): [/INST]"""
+Erreurs détectées à corriger (liste non exhaustive) :
+{hints_str}
+
+- N'ajout plus d'information. Retourne suelement le texte corrigé.
+
+Texte corrigé :
+[/INST]"""
+        
+        # Prompt normal para textos más largos
+        return f"""[INST]Corrige strictement le texte ci-dessous en français.
+
+Texte original :
+{text}
+
+Erreurs détectées à corriger (liste non exhaustive) :
+{hints_str}
+→ Tu peux également corriger d'autres erreurs si tu en détectes, même si elles ne figurent pas dans cette liste.
+
+CONTRAINTES STRICTES (à respecter absolument) :
+1. Prioriser les errreurs listées, mais corriger aussi d'autres erreurs si nécessaire.
+2. Ne JAMAIS remplacer un mot par un synonyme.
+3. Ne JAMAIS modifier le sens d'un verbe (le lexème du verbe doit rester exactement le même).
+4. Tu peux librement modifier, remplacer ou ajouter des lettres à l'intérieur d'un mot (y compris supprimer des lettres ou ajouter des accents) pour corriger son orthographe. Cela est autorisé même si le mot paraît très différent, tant que le sens reste le même. CECI NE COMPTE PAS comme "ajouter un nouveau mot entier".
+4.1. Tu NE DOIS PAS ajouter de nouveaux mots porteurs de sens (noms, verbes, adjectifs, adverbes) qui n'existent pas dans le texte original.
+4.2. Tu peux toutefois corriger entièrement l'orthographe d'un mot existant, même si beaucoup de lettres changent.
+5. Ne JAMAIS supprimer, déplacer ou modifier les marqueurs du type ENT_X_Y.
+6. Ne JAMAIS réorganiser, fusionner ni reformuler les phrases.
+
+CORRECTIONS AUTORISÉES UNIQUEMENT :
+- Orthographe
+- Conjugaison
+- Accords (genre, nombre, déterminants, pronoms)
+- Ponctuation (apostrophes, virgules, majuscules/minuscules)
+- Si le texte original ne contient qu'un seul mot,  le texte corrigé doit aussi contenir exactement un seul mot.
+
+OBJECTIF :
+Produire une version corrigée, fidèle au texte original, sans aucune reformulation ni ajout.
+
+Texte corrigé :
+[/INST]"""
     
     def _extract_lt_hints(self, matches) -> list[str]:
         """Extract error messages from LanguageTool matches with context."""
         hints = []
-        for m in matches[:5]:  # Limit to top 5 errors
+        for m in matches:
+        #for m in matches[:5]:  # Limit to top 5 errors
             # Get the original word/phrase that has the error
             context = getattr(m, 'context', '')
             offset = getattr(m, 'offset', 0)
@@ -134,7 +159,6 @@ Texte corrigé (MÊME sens, MÊMES mots): [/INST]"""
         masked = []
         text_to_check = text
         
-        # TODO : SPACY stopt woriking when runner LLM pipline
         # Step 1: Mask entities
         if self.nlp is not None:
             doc = self.nlp(text)
@@ -178,14 +202,19 @@ Texte corrigé (MÊME sens, MÊMES mots): [/INST]"""
         try:
             response = self.llm(
                 prompt,
-                max_tokens=min(self.max_tokens, len(text_to_check.split()) * 2),  # Dynamic limit
+                max_tokens=min(self.max_tokens, max(50, len(text_to_check.split()) * 4)),  # Mínimo 50 tokens, margen x4
                 temperature=0.1,  # Very low temperature for conservative corrections
                 top_p=0.85,  # Focused sampling
                 repeat_penalty=1.1,  # Avoid repetitions
-                stop=["</s>", "[INST]", "\n\n", "Texte"],  # Stop early
+                stop=["</s>", "[INST]"],  # Solo stops seguros (sin "\n\n" ni "Texte" que causan cortes)
                 echo=False,
             )
             llm_output = response['choices'][0]['text'].strip()
+            
+            # Verificar que la respuesta no esté cortada
+            finish_reason = response['choices'][0].get('finish_reason', '')
+            if finish_reason == 'length' and debug:
+                print(f"⚠️  Respuesta cortada por límite de tokens\n")
             
             if debug:
                 print(f"Respuesta LLM:\n{llm_output}\n")

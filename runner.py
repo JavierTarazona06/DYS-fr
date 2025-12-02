@@ -1,22 +1,17 @@
 import subprocess, sys, os
 from pathlib import Path
 from src.utils.config import load_config
-from src.improvers.lt_server import LanguageToolServer
+
+# Import shared LT server initialization
+sys.path.insert(0, str(Path(__file__).parent))
+from scripts.start_lt_server import start_lt_server_from_config
+
 
 def main():
     cfg = load_config()
-    lt_cfg = cfg["lt"]["server"]
-    host, port = lt_cfg["host"], int(lt_cfg["port"])
 
-    # Start LT server (embedded JRE + JAR)
-    with LanguageToolServer(
-        host=host, port=port,
-        jre_bin=lt_cfg["jre_bin"],
-        jar_path=lt_cfg["jar_path"],
-        allow_origin=lt_cfg.get("allow_origin", "*"),
-        heap_mb=int(lt_cfg.get("heap_mb", 256)),
-        lt_args=[] # Remove config argument - not needed
-    ) as srv:
+    # Start LT server using shared configuration
+    with start_lt_server_from_config() as srv:
         env = os.environ.copy()
         env["LT_URL"] = srv.url
         env["LT_LANG"] = cfg["lt"]["lang"]
