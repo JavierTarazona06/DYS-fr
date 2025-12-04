@@ -63,8 +63,7 @@ class LanguageToolServer(contextlib.AbstractContextManager):
             java_cmd,
             f"-Xmx{self.heap_mb}m",
             "-jar", str(self.jar_path),
-            "-l", "fr",                     # okay to keep; server ignores unknown flags gracefully
-            "-p", str(self.port),
+            "--port", str(self.port),
             "--allow-origin", self.allow_origin,
         ] + self.lt_args # Append custom LanguageTool arguments
 
