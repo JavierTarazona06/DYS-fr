@@ -66,7 +66,7 @@ class LLMImprover(TextImprover):
         hints_str = "\n".join(f"- {h}" for h in lt_hints) if lt_hints else "Aucune."
         
         # Prompt ultra-simplificado para textos muy cortos (evita cortes prematuros)
-        if len(text.split()) <= 3:
+        if len(text.split()) <= 10:
             return f"""[INST]Corrige strictement le texte ci-dessous en français :
 {text}
 
@@ -74,58 +74,46 @@ Erreurs détectées à corriger (liste non exhaustive) :
 {hints_str}
 
 - N'ajout plus d'information. Retourne suelement le texte corrigé.
+- Tout mot qui commence par "ENT_" (ENT_X_PER-Personne, ENT_X_LOC-Location, ENT_X_ORG-Organisation, ENT_X_MISC-Autre, ENT_X_DATE-Date) est un marqueur spécial.
+- Ne JAMAIS les modifier, supprimer ni déplacer. Tu dois les recopier à l'identique.
 
 Texte corrigé :
 [/INST]"""
         
-        # Prompt normal para textos más largos
-        return f"""[INST]Corrige strictement le texte ci-dessous en français.
+        # Prompt normal para textos más largos # TODO : Puede ,ejorar con el prompt de stramlit
+        return f"""[[INST]
+Tu es un correcteur orthographique minimal pour le français. Tu corriges des textes écrits par des personnes DYS. Tu dois seulement les rendre lisibles et grammaticalement corrects, sans les réécrire ni changer le sens.
 
 Texte original :
 {text}
 
-Suggestions d'erreurs détectées à corriger (liste non exhaustive) :
+Suggestions :
 {hints_str}
-→ Tu peux également corriger d'autres erreurs si tu en détectes, même si elles ne figurent pas dans cette liste.
 
-CONTRAINTES STRICTES (à respecter absolument) :
-1. PRÉSERVATION DES MARQUEURS ENT_X_Y :
-   - Ne JAMAIS supprimer, déplacer ou modifier les marqueurs du type ENT_X_Y
-   - Les marqueurs doivent rester EXACTEMENT comme dans le texte original (même casse : majuscules/minuscules)
-   - ENT_X_PER = entité de type PERSONNE
-   - ENT_X_LOC = entité de type LIEU
-   - ENT_X_ORG = entité de type ORGANISATION
-   - ENT_X_MISC = entité de type DIVERS
-   - ENT_X_DATE = entité de type DATE
+RÈGLES STRICTES :
 
-2. VERBES ET TEMPS VERBAUX :
-   - Ne JAMAIS remplacer un mot par un synonyme
-   - Ne JAMAIS changer le temps verbal (présent → passé composé, etc.)
-   - Si le texte contient "a" + participe passé (ex: "a acheter"), corrige le participe en "a acheté" (passé composé)
-   - Si le texte contient un infinitif (ex: "pour acheter"), garde l'infinitif
-   - Le lexème du verbe (acheter, manger, aller) doit rester exactement le même
+1) Marqueurs ENT_X_Y
+- Tout mot qui commence par "ENT_" (ENT_X_PER-Personne, ENT_X_LOC-Location, ENT_X_ORG-Organisation, ENT_X_MISC-Autre, ENT_X_DATE-Date) est un marqueur spécial.
+- Ne JAMAIS les modifier, supprimer ni déplacer. Tu dois les recopier à l'identique.
 
-3. ORTHOGRAPHE ET ACCORDS :
-   - Tu peux corriger librement l'orthographe d'un mot (ajouter/supprimer lettres, accents)
-   - Cela est autorisé même si le mot change beaucoup, tant que le sens reste le même
-   - Tu NE DOIS PAS ajouter de nouveaux mots porteurs de sens qui n'existent pas dans le texte original
-   - Tu peux corriger entièrement l'orthographe d'un mot existant
+2) Verbes et temps
+- Ne JAMAIS remplacer un verbe par un synonyme.
+- Ne JAMAIS changer le temps verbal (ne pas passer au passé simple, futur, etc.).
+- Garder les auxiliaires existants ("a", "est", "avait", etc.).
+- Corriger "a" + verbe incorrect vers "a" + participe passé correct
+  (ex : "a acheter" → "a acheté", INTERDIT : "acheta").
 
-4. STRUCTURE :
-   - Ne JAMAIS réorganiser, fusionner ni reformuler les phrases
-   - Garde la même structure grammaticale
+3) Corrections autorisées
+- Orthographe, accords, conjugaison (même temps), ponctuation.
+- Ne pas ajouter de nouveaux mots porteurs de sens (noms, verbes, adjectifs, adverbes).
+- Fusionner ou séparer des mots seulement pour corriger une faute évidente
+  (ex : "l ecol" → "l'école").
 
-CORRECTIONS AUTORISÉES UNIQUEMENT :
-- Orthographe
-- Conjugaison (en préservant le temps verbal)
-- Accords (genre, nombre, déterminants, pronoms)
-- Ponctuation (apostrophes, virgules, majuscules/minuscules)
-- Participes passés (ex: "acheter" → "acheté" dans "a acheter" → "a acheté")
+4) Structure et style
+- Ne pas changer l'ordre des mots ni le registre de langue.
+- Ne pas résumer, développer ou expliquer : même contenu, simplement corrigé.
 
-OBJECTIF :
-Produire une version corrigée, fidèle au texte original, sans reformulation ni ajout.
-
-Texte corrigé (uniquement le texte, sans explication) :
+Texte corrigé (UNIQUEMENT le texte corrigé) :
 [/INST]"""
     
     def _extract_lt_hints(self, matches) -> list[str]:

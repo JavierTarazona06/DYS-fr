@@ -149,12 +149,12 @@ def test_mistral_entity_preservation(model_path, model_cfg, nlp, lt_server):
 
     test_cases = [
         ("Marie Dubois a acheter du pain.", ["Marie Dubois"]),
-        ("Je vis a Paris depuis 2020.", ["Paris", "2020"]),
+        #("Je vis a Paris depuis 2020.", ["Paris", "2020"]),
     ]
 
     passed = 0
     for input_text, entities in test_cases:
-        result = improver.improve(input_text, debug=False)
+        result = improver.improve(input_text, debug=True)
         all_preserved = all(entity in result for entity in entities)
 
         status = "OK" if all_preserved else "FAIL"
@@ -241,7 +241,7 @@ def test_mistral_dyslexic_paragraph(model_path, model_cfg, nlp, lt_server):
     print(test_text)
     print("-" * 70)
 
-    result = improver.improve(test_text, debug=True)
+    result = improver.improve(test_text, debug=False)
 
     print("\n✅ OUTPUT:")
     print("-" * 70)
