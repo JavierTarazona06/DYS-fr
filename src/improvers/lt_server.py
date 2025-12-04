@@ -83,10 +83,13 @@ class LanguageToolServer(contextlib.AbstractContextManager):
             # Create a new process group so we can terminate cleanly on Windows
             creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
+        print(f"Starting LanguageTool server: {' '.join(args)}")
+
+        # Inherit stdout/stderr so we don't block on a full pipe if LT logs a lot
         self.proc = subprocess.Popen(
             args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stdout=None,
+            stderr=None,
             env=env,
             creationflags=creationflags,
         )
@@ -109,11 +112,21 @@ class LanguageToolServer(contextlib.AbstractContextManager):
         if self.proc and self.proc.poll() is None:
             try:
                 if os.name == "nt":
-                    # Best-effort termination on Windows
-                    self.proc.terminate()
+                    # On Windows, use taskkill to force termination
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(self.proc.pid)],
+                        capture_output=True,
+                        check=False
+                    )
                 else:
                     self.proc.terminate()
-                self.proc.wait(timeout=5)
+                
+                # Wait for process to end
+                try:
+                    self.proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    # Force kill if still running
+                    self.proc.kill()
             except Exception:
                 try:
                     self.proc.kill()
