@@ -3,9 +3,6 @@ import streamlit as st
 from pathlib import Path
 from src.utils.config import load_config
 from src.guardrails.spacy_loader import load_french_nlp
-from src.improvers.lt_improver import LTImprover
-from src.improvers.llm_improver import LLMImprover
-from src.improvers.ollama_improver import OllamaImprover
 
 @st.cache_resource
 def get_config():
@@ -16,6 +13,7 @@ def get_nlp(cfg):
     spacy_cfg = cfg["spacy"]
     return load_french_nlp(
         spacy_cfg["model"],
+        target_dir=spacy_cfg.get("target_dir"),
         only_ner_pos=spacy_cfg.get("only_ner_pos", True),
         add_date_ruler=spacy_cfg.get("add_date_ruler", False),
     )
@@ -23,6 +21,8 @@ def get_nlp(cfg):
 @st.cache_resource
 def get_lt_improver(_cfg, _nlp):
     # Note: Underscore arguments (_cfg) tells Streamlit not to hash them for caching
+    from src.improvers.lt_improver import LTImprover
+
     server_url = f"http://{_cfg['lt']['server']['host']}:{_cfg['lt']['server']['port']}"
     return LTImprover(lang=_cfg['lt']['lang'], server_url=server_url, nlp=_nlp)
 
@@ -37,6 +37,8 @@ def get_llm_improver(_cfg, _nlp, model_key: str):
     
     # --- GEMMA (OLLAMA) ---
     if model_key == "gemma":
+        from src.improvers.ollama_improver import OllamaImprover
+
         conf = _cfg['llm']['gemma']
         return OllamaImprover(
             model_name=conf['model_name'],
@@ -48,6 +50,8 @@ def get_llm_improver(_cfg, _nlp, model_key: str):
 
     # --- MISTRAL (EMBEDDED) ---
     elif model_key == "mistral":
+        from src.improvers.llm_improver import LLMImprover
+
         conf = _cfg['llm']['mistral']
         model_path = Path(_cfg['llm']['models_dir']) / conf['filename']
         

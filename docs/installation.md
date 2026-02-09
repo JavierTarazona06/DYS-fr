@@ -132,3 +132,57 @@ The application should open automatically in your browser at `http://localhost:8
 
 **"Visual C++ Build Tools missing" (Windows)**
 *   If `pip install llama-cpp-python` fails, install the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ workload).
+
+---
+
+## 6. Build a Windows Executable (.exe)
+
+Use PyInstaller to package the project into a distributable Windows folder with an executable entry point.
+
+### A. Prerequisites for packaging
+
+From the project root, make sure setup and local assets are already installed:
+
+```powershell
+.\.venv\Scripts\Activate
+pip install -r requirements.txt
+python scripts/download_languagetool.py
+python scripts/download_spacy.py
+```
+
+If you want hybrid mode with embedded Mistral, also download the GGUF model:
+
+```powershell
+python scripts/download_mistral.py
+```
+
+### B. Build command
+
+Run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1 -Clean
+```
+
+If your default Python interpreter cannot install PyInstaller and you are **not** inside a virtual environment, force a launcher version:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_exe.ps1 -Clean -UsePyLauncher -PythonVersion 3.11
+```
+
+Important:
+- If `.venv` is active, do **not** use `-UsePyLauncher`; otherwise, the build may run with global packages and become very slow.
+
+Output executable:
+
+```text
+dist/DYS-fr/DYS-fr.exe
+```
+
+### C. Run the packaged app
+
+```powershell
+.\dist\DYS-fr\DYS-fr.exe
+```
+
+The app should open in your browser at `http://localhost:8501`.
