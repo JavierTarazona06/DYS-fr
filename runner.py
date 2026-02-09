@@ -13,7 +13,7 @@ from src.utils.paths import resolve_runtime_path
 
 # Import shared LT server initialization
 sys.path.insert(0, str(Path(__file__).parent))
-from scripts.start_lt_server import start_lt_server_from_config
+from scripts.start_lt_server_automatic import start_lt_server_from_config
 
 
 def _wait_http_ready(url: str, timeout_s: float = 40.0) -> bool:
