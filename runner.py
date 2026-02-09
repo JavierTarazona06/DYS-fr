@@ -4,7 +4,7 @@ from src.utils.config import load_config
 
 # Import shared LT server initialization
 sys.path.insert(0, str(Path(__file__).parent))
-from scripts.start_lt_server import start_lt_server_from_config
+from scripts.start_lt_server_automatic import start_lt_server_from_config
 
 
 def main():

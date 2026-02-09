@@ -22,6 +22,7 @@ class LLMImprover(TextImprover):
         lang: str,
         lt_server_url: str,
         nlp: Language | None = None,
+        lt_client: LTClient | None = None,
         n_ctx: int = 4096,
         n_threads: int | None = None,
         max_tokens: int = 512,
@@ -32,13 +33,20 @@ class LLMImprover(TextImprover):
         :param lang: Language code for LanguageTool ("fr")
         :param lt_server_url: LanguageTool server URL
         :param nlp: spaCy model for NER
+        :param lt_client: Optional pre-existing LTClient to reuse (avoids creating new connections)
         :param n_ctx: Context window size (default 4096)
         :param n_threads: Number of CPU threads (None = auto-detect)
         :param max_tokens: Max tokens to generate
         :param temperature: Sampling temperature (lower = more deterministic)
         """
         self.nlp = nlp
-        self.lt_client = LTClient(lang, lt_server_url)
+        # Reuse existing client if provided, otherwise create new one
+        if lt_client is not None:
+            self.lt_client = lt_client
+            self._owns_lt_client = False  # Don't close shared client
+        else:
+            self.lt_client = LTClient(lang, lt_server_url)
+            self._owns_lt_client = True
         self.max_tokens = max_tokens
         self.temperature = temperature
         
@@ -58,7 +66,7 @@ class LLMImprover(TextImprover):
         hints_str = "\n".join(f"- {h}" for h in lt_hints) if lt_hints else "Aucune."
         
         # Prompt ultra-simplificado para textos muy cortos (evita cortes prematuros)
-        if len(text.split()) <= 3:
+        if len(text.split()) <= 10:
             return f"""[INST]Corrige strictement le texte ci-dessous en français :
 {text}
 
@@ -66,48 +74,58 @@ Erreurs détectées à corriger (liste non exhaustive) :
 {hints_str}
 
 - N'ajout plus d'information. Retourne suelement le texte corrigé.
+- Tout mot qui commence par "ENT_" (ENT_X_PER-Personne, ENT_X_LOC-Location, ENT_X_ORG-Organisation, ENT_X_MISC-Autre, ENT_X_DATE-Date) est un marqueur spécial.
+- Ne JAMAIS les modifier, supprimer ni déplacer. Tu dois les recopier à l'identique.
 
 Texte corrigé :
 [/INST]"""
         
-        # Prompt normal para textos más largos
-        return f"""[INST]Corrige strictement le texte ci-dessous en français.
+        # Prompt normal para textos más largos # TODO : Puede ,ejorar con el prompt de stramlit
+        return f"""[[INST]
+Tu es un correcteur orthographique minimal pour le français. Tu corriges des textes écrits par des personnes DYS. Tu dois seulement les rendre lisibles et grammaticalement corrects, sans les réécrire ni changer le sens.
 
 Texte original :
 {text}
 
-Erreurs détectées à corriger (liste non exhaustive) :
+Suggestions :
 {hints_str}
-→ Tu peux également corriger d'autres erreurs si tu en détectes, même si elles ne figurent pas dans cette liste.
 
-CONTRAINTES STRICTES (à respecter absolument) :
-1. Prioriser les errreurs listées, mais corriger aussi d'autres erreurs si nécessaire.
-2. Ne JAMAIS remplacer un mot par un synonyme.
-3. Ne JAMAIS modifier le sens d'un verbe (le lexème du verbe doit rester exactement le même).
-4. Tu peux librement modifier, remplacer ou ajouter des lettres à l'intérieur d'un mot (y compris supprimer des lettres ou ajouter des accents) pour corriger son orthographe. Cela est autorisé même si le mot paraît très différent, tant que le sens reste le même. CECI NE COMPTE PAS comme "ajouter un nouveau mot entier".
-4.1. Tu NE DOIS PAS ajouter de nouveaux mots porteurs de sens (noms, verbes, adjectifs, adverbes) qui n'existent pas dans le texte original.
-4.2. Tu peux toutefois corriger entièrement l'orthographe d'un mot existant, même si beaucoup de lettres changent.
-5. Ne JAMAIS supprimer, déplacer ou modifier les marqueurs du type ENT_X_Y.
-6. Ne JAMAIS réorganiser, fusionner ni reformuler les phrases.
+RÈGLES STRICTES :
 
-CORRECTIONS AUTORISÉES UNIQUEMENT :
-- Orthographe
-- Conjugaison
-- Accords (genre, nombre, déterminants, pronoms)
-- Ponctuation (apostrophes, virgules, majuscules/minuscules)
-- Si le texte original ne contient qu'un seul mot,  le texte corrigé doit aussi contenir exactement un seul mot.
+1) Marqueurs ENT_X_Y
+- Tout mot qui commence par "ENT_" (ENT_X_PER-Personne, ENT_X_LOC-Location, ENT_X_ORG-Organisation, ENT_X_MISC-Autre, ENT_X_DATE-Date) est un marqueur spécial.
+- Ne JAMAIS les modifier, supprimer ni déplacer. Tu dois les recopier à l'identique.
 
-OBJECTIF :
-Produire une version corrigée, fidèle au texte original, sans aucune reformulation ni ajout.
+2) Verbes et temps
+- Ne JAMAIS remplacer un verbe par un synonyme.
+- Ne JAMAIS changer le temps verbal (ne pas passer au passé simple, futur, etc.).
+- Garder les auxiliaires existants ("a", "est", "avait", etc.).
+- Corriger "a" + verbe incorrect vers "a" + participe passé correct
+  (ex : "a acheter" → "a acheté", INTERDIT : "acheta").
 
-Texte corrigé :
+3) Corrections autorisées
+- Orthographe, accords, conjugaison (même temps), ponctuation.
+- Ne pas ajouter de nouveaux mots porteurs de sens (noms, verbes, adjectifs, adverbes).
+- Fusionner ou séparer des mots seulement pour corriger une faute évidente
+  (ex : "l ecol" → "l'école").
+
+4) Structure et style
+- Ne pas changer l'ordre des mots ni le registre de langue.
+- Ne pas résumer, développer ou expliquer : même contenu, simplement corrigé.
+
+Texte corrigé (UNIQUEMENT le texte corrigé) :
 [/INST]"""
     
     def _extract_lt_hints(self, matches) -> list[str]:
         """Extract error messages from LanguageTool matches with context."""
         hints = []
-        for m in matches:
-        #for m in matches[:5]:  # Limit to top 5 errors
+        # Patterns to skip (entity placeholders)
+        skip_patterns = ["ENT_", "_PER", "_LOC", "_ORG", "_MISC", "_DATE"]
+        
+        #for m in matches:
+        until = len(matches) * 0.1
+        until = until if until > 5 else 5
+        for m in matches[:int(until)]:  # Limit to top 5 errors
             # Get the original word/phrase that has the error
             context = getattr(m, 'context', '')
             offset = getattr(m, 'offset', 0)
@@ -126,13 +144,19 @@ Texte corrigé :
             # Build hint with context
             msg = getattr(m, 'message', '')
             
+            # Create hint string
+            hint = None
             if error_text and suggestions:
                 suggestion_str = " / ".join(f'"{s}"' for s in suggestions)
-                hints.append(f'"{error_text}" → {suggestion_str}: {msg}')
+                hint = f'"{error_text}" → {suggestion_str}: {msg}'
             elif error_text:
-                hints.append(f'"{error_text}": {msg}')
+                hint = f'"{error_text}": {msg}'
             elif msg:
-                hints.append(msg)
+                hint = msg
+            
+            # Skip hint if it contains entity placeholder patterns
+            if hint and not any(pattern in hint for pattern in skip_patterns):
+                hints.append(hint)
                 
         return hints
     
@@ -169,14 +193,15 @@ Texte corrigé :
                 print(f"{'='*70}")
                 print(f"Entidades detectadas: {len(masked)}")
                 if masked:
-                    for i, (placeholder, original) in enumerate(masked, 1):
-                        print(f"  {i}. {placeholder} → {original}")
+                    for i, entity in enumerate(masked, 1):
+                        print(f"  {i}. {entity.placeholder} → {entity.text}")
                 print(f"\nTexto enmascarado:\n{text_to_check}\n")
         
         # Step 2: Pre-pass with LT
         lt_matches_before = self.lt_client.check(text_to_check)
-        error_count_before = len(lt_matches_before)
+        #error_count_before = len(lt_matches_before)
         lt_hints = self._extract_lt_hints(lt_matches_before)
+        error_count_before = len(lt_hints)
         
         if debug:
             print(f"{'='*70}")
@@ -224,14 +249,23 @@ Texte corrigé :
             return reinject_entities(text_to_check, masked) if masked else text
         
         # Step 4: Post-validation
-        error_count_after = self._count_lt_errors(llm_output)
-        
         if debug:
             print(f"{'='*70}")
             print("STEP 4: Post-validación")
             print(f"{'='*70}")
+            print("Verificando errores con LanguageTool...")
+        
+        lt_matches_after = self.lt_client.check(llm_output)
+        lt_hints_after = self._extract_lt_hints(lt_matches_after)
+        error_count_after = len(lt_hints_after)
+
+        if debug:
             print(f"Errores antes:  {error_count_before}")
             print(f"Errores después: {error_count_after}")
+            if lt_hints_after:
+                print("\nErrores restantes:")
+                for i, hint in enumerate(lt_hints_after, 1):
+                    print(f"  {i}. {hint}")
         
         if error_count_after > error_count_before:
             if debug:
@@ -267,5 +301,7 @@ Texte corrigé :
     
     def close(self):
         """Release resources."""
-        self.lt_client.close()
+        # Only close LT client if we own it
+        if self._owns_lt_client:
+            self.lt_client.close()
         # llama-cpp-python handles cleanup automatically

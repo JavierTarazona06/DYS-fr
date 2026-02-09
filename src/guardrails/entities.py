@@ -43,6 +43,10 @@ def _should_mask_entity(ent: Span) -> bool:
     look like actual proper names; otherwise we leave them untouched so downstream
     improvers (LanguageTool, LLMs, etc.) can still correct obvious typos.
     """
+    # Ignore MISC entities (ENT_X_MISC) as requested
+    if ent.label_ == "MISC":
+        return False
+
     if ent.label_ != "PER":
         return True
 

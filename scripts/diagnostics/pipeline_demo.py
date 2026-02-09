@@ -10,7 +10,6 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.utils.config import load_config
 from src.guardrails.spacy_loader import load_french_nlp
 from src.guardrails.entities import mask_entities, reinject_entities
-from src.improvers.lt_server import LanguageToolServer
 from src.improvers.lt_improver import LTImprover
 
 TEXT = "Ce juor, le 12 janvier 2024, Marie Dampan ont visité Paris."
@@ -39,15 +38,10 @@ def main() -> None:
     for m in masked:
         print(m)
 
-    with LanguageToolServer(
-        srv_cfg["host"],
-        srv_cfg["port"],
-        srv_cfg["jre_bin"],
-        srv_cfg["jar_path"],
-    ) as server:
-        improver = LTImprover(lt_cfg["lang"], server.url)
-        improved = improver.improve(masked_txt)
-        improver.close()
+    server_url = f"http://{srv_cfg['host']}:{srv_cfg['port']}"
+    improver = LTImprover(lt_cfg["lang"], server_url)
+    improved = improver.improve(masked_txt)
+    improver.close()
 
     final = reinject_entities(improved, masked)
 
