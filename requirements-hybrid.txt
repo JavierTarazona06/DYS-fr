@@ -1,0 +1,3 @@
+-r requirements-base.txt
+llama_cpp_python==0.2.90
+ollama==0.6.1
