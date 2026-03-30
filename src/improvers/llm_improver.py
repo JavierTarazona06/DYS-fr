@@ -23,6 +23,8 @@ class LLMImprover(TextImprover):
         lt_server_url: str,
         nlp: Language | None = None,
         lt_client: LTClient | None = None,
+        lt_config: dict | None = None,
+        validate_with_lt_after: bool = False,
         n_ctx: int = 4096,
         n_threads: int | None = None,
         max_tokens: int = 512,
@@ -34,6 +36,8 @@ class LLMImprover(TextImprover):
         :param lt_server_url: LanguageTool server URL
         :param nlp: spaCy model for NER
         :param lt_client: Optional pre-existing LTClient to reuse (avoids creating new connections)
+        :param lt_config: Optional LT client settings (timeouts, retries, cache)
+        :param validate_with_lt_after: If True, compare LT errors before/after
         :param n_ctx: Context window size (default 4096)
         :param n_threads: Number of CPU threads (None = auto-detect)
         :param max_tokens: Max tokens to generate
@@ -45,8 +49,9 @@ class LLMImprover(TextImprover):
             self.lt_client = lt_client
             self._owns_lt_client = False  # Don't close shared client
         else:
-            self.lt_client = LTClient(lang, lt_server_url)
+            self.lt_client = LTClient(lang, lt_server_url, config=lt_config)
             self._owns_lt_client = True
+        self.validate_with_lt_after = validate_with_lt_after
         self.max_tokens = max_tokens
         self.temperature = temperature
         
@@ -248,38 +253,49 @@ Texte corrigé (UNIQUEMENT le texte corrigé) :
             # Fallback: return original text
             return reinject_entities(text_to_check, masked) if masked else text
         
-        # Step 4: Post-validation
-        if debug:
-            print(f"{'='*70}")
-            print("STEP 4: Post-validación")
-            print(f"{'='*70}")
-            print("Verificando errores con LanguageTool...")
-        
-        lt_matches_after = self.lt_client.check(llm_output)
-        lt_hints_after = self._extract_lt_hints(lt_matches_after)
-        error_count_after = len(lt_hints_after)
+        # Step 4: Post-validation (optional for lower latency)
+        if self.validate_with_lt_after:
+            if debug:
+                print(f"{'='*70}")
+                print("STEP 4: Post-validation")
+                print(f"{'='*70}")
+                print("Checking errors with LanguageTool...")
 
-        if debug:
-            print(f"Errores antes:  {error_count_before}")
-            print(f"Errores después: {error_count_after}")
-            if lt_hints_after:
-                print("\nErrores restantes:")
-                for i, hint in enumerate(lt_hints_after, 1):
-                    print(f"  {i}. {hint}")
-        
-        if error_count_after > error_count_before:
+            lt_matches_after = self.lt_client.check(llm_output)
+            lt_hints_after = self._extract_lt_hints(lt_matches_after)
+            error_count_after = len(lt_hints_after)
+
             if debug:
-                print(f"⚠️  REVERTIDO (empeoró la calidad)")
+                print(f"Errors before: {error_count_before}")
+                print(f"Errors after:  {error_count_after}")
+                if lt_hints_after:
+                    print("\nRemaining errors:")
+                    for i, hint in enumerate(lt_hints_after, 1):
+                        print(f"  {i}. {hint}")
+
+            if error_count_after > error_count_before:
+                if debug:
+                    print("REVERTED (quality degraded)")
+                else:
+                    print(
+                        f"[LLM_DEGRADED] Errors increased ({error_count_before} -> "
+                        f"{error_count_after}), reverting to input"
+                    )
+                final_text = text_to_check
             else:
-                print(f"[LLM_DEGRADED] Errors increased ({error_count_before} → {error_count_after}), reverting to input")
-            final_text = text_to_check
-        else:
+                if debug:
+                    print("ACCEPTED (quality preserved or improved)")
+                final_text = llm_output
+
             if debug:
-                print(f"✓ ACEPTADO (mejoró o mantuvo calidad)")
+                print()
+        else:
             final_text = llm_output
-        
-        if debug:
-            print()
+            if debug:
+                print(f"{'='*70}")
+                print("STEP 4: Post-validation skipped (fast mode)")
+                print(f"{'='*70}")
+                print()
         
         # Step 5: Reinject entities
         if masked:

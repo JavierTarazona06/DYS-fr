@@ -24,7 +24,13 @@ def get_lt_improver(_cfg, _nlp):
     from src.improvers.lt_improver import LTImprover
 
     server_url = f"http://{_cfg['lt']['server']['host']}:{_cfg['lt']['server']['port']}"
-    return LTImprover(lang=_cfg['lt']['lang'], server_url=server_url, nlp=_nlp)
+    lt_client_cfg = _cfg.get('lt', {}).get('client', {})
+    return LTImprover(
+        lang=_cfg['lt']['lang'],
+        server_url=server_url,
+        nlp=_nlp,
+        lt_config=lt_client_cfg,
+    )
 
 @st.cache_resource
 def get_llm_improver(_cfg, _nlp, model_key: str):
@@ -34,6 +40,8 @@ def get_llm_improver(_cfg, _nlp, model_key: str):
     If model_key is 'gemma', connects to Ollama.
     """
     lt_url = f"http://{_cfg['lt']['server']['host']}:{_cfg['lt']['server']['port']}"
+    lt_client_cfg = _cfg.get('lt', {}).get('client', {})
+    validate_with_lt_after = _cfg.get('llm', {}).get('validate_with_lt_after', False)
     
     # --- GEMMA (OLLAMA) ---
     if model_key == "gemma":
@@ -45,7 +53,12 @@ def get_llm_improver(_cfg, _nlp, model_key: str):
             lang=_cfg['lt']['lang'],
             lt_server_url=lt_url,
             nlp=_nlp,
-            temperature=conf.get('temperature', 0.1)
+            lt_config=lt_client_cfg,
+            validate_with_lt_after=conf.get('validate_with_lt_after', validate_with_lt_after),
+            temperature=conf.get('temperature', 0.1),
+            num_ctx=conf.get('num_ctx', 2048),
+            num_predict=conf.get('num_predict', 256),
+            top_p=conf.get('top_p', 0.9),
         )
 
     # --- MISTRAL (EMBEDDED) ---
@@ -63,6 +76,8 @@ def get_llm_improver(_cfg, _nlp, model_key: str):
             lang=_cfg['lt']['lang'],
             lt_server_url=lt_url,
             nlp=_nlp,
+            lt_config=lt_client_cfg,
+            validate_with_lt_after=conf.get('validate_with_lt_after', validate_with_lt_after),
             n_ctx=conf.get('n_ctx', 2048),
             max_tokens=conf.get('max_tokens', 512),
             temperature=conf.get('temperature', 0.1),

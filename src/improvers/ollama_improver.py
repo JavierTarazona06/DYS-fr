@@ -16,12 +16,21 @@ class OllamaImprover(TextImprover):
         lang: str,
         lt_server_url: str,
         nlp: Language | None = None,
+        lt_config: dict | None = None,
+        validate_with_lt_after: bool = False,
         temperature: float = 0.1,
+        num_ctx: int = 2048,
+        num_predict: int = 256,
+        top_p: float = 0.9,
     ):
         self.model_name = model_name
         self.nlp = nlp
-        self.lt_client = LTClient(lang, lt_server_url)
+        self.lt_client = LTClient(lang, lt_server_url, config=lt_config)
+        self.validate_with_lt_after = validate_with_lt_after
         self.temperature = temperature
+        self.num_ctx = num_ctx
+        self.num_predict = num_predict
+        self.top_p = top_p
 
     def _build_system_prompt(self) -> str:
         return (
@@ -69,13 +78,19 @@ class OllamaImprover(TextImprover):
 
         # 3. Call Ollama
         try:
+            options = {
+                'temperature': self.temperature,
+                'num_ctx': self.num_ctx,
+                'num_predict': self.num_predict,
+                'top_p': self.top_p,
+            }
             response = ollama.chat(
                 model=self.model_name,
                 messages=[
                     {'role': 'system', 'content': self._build_system_prompt()},
                     {'role': 'user', 'content': self._build_user_prompt(text_to_check, hints)},
                 ],
-                options={'temperature': self.temperature}
+                options=options,
             )
             corrected_text = response['message']['content'].strip()
             
@@ -87,12 +102,14 @@ class OllamaImprover(TextImprover):
             if debug: print(f"Ollama Error: {e}")
             return text  # Fallback on error
 
-        # 4. Post-Validation
-        errors_after = self._count_lt_errors(corrected_text)
-        
-        # If model hallucinated and made it worse, revert
-        if errors_after > errors_before:
-            final_text = text_to_check 
+        # 4. Post-Validation (optional for lower latency)
+        if self.validate_with_lt_after:
+            errors_after = self._count_lt_errors(corrected_text)
+            # If model hallucinated and made it worse, revert
+            if errors_after > errors_before:
+                final_text = text_to_check
+            else:
+                final_text = corrected_text
         else:
             final_text = corrected_text
 
