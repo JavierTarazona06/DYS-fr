@@ -1,4 +1,4 @@
-﻿# -*- mode: python ; coding: utf-8 -*-
+# -*- mode: python ; coding: utf-8 -*-
 import os
 from pathlib import Path
 
@@ -37,6 +37,16 @@ def include_spacy_submodule(name: str) -> bool:
     return not name.startswith("spacy.tests")
 
 
+def include_src_submodule(name: str) -> bool:
+    if not INCLUDE_HYBRID and name in {
+        "src.improvers.llm_improver",
+        "src.improvers.ollama_improver",
+    }:
+        return False
+
+    return True
+
+
 datas = [
     (str(PROJECT_ROOT / "config.yaml"), "."),
     (str(PROJECT_ROOT / "app.py"), "."),
@@ -55,6 +65,7 @@ datas += copy_metadata("language_tool_python")
 hiddenimports = []
 hiddenimports += collect_submodules("streamlit", filter=include_streamlit_submodule)
 hiddenimports += collect_submodules("spacy", filter=include_spacy_submodule)
+hiddenimports += collect_submodules("src", filter=include_src_submodule)
 hiddenimports += [
     "streamlit.web.cli",
     "streamlit.runtime.runtime",

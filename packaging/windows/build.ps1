@@ -25,6 +25,29 @@ function Resolve-ProjectPath([string]$PathValue) {
     return [System.IO.Path]::GetFullPath((Join-Path $projectRoot $PathValue))
 }
 
+function Stop-RunningBundleProcesses([string]$BundleRoot) {
+    if (!(Test-Path $BundleRoot)) {
+        return
+    }
+
+    $normalizedBundleRoot = [System.IO.Path]::GetFullPath($BundleRoot)
+    $matchingProcesses = Get-Process | Where-Object {
+        $_.Path -and ([System.IO.Path]::GetFullPath($_.Path).StartsWith($normalizedBundleRoot, [System.StringComparison]::OrdinalIgnoreCase))
+    }
+
+    if (!$matchingProcesses) {
+        return
+    }
+
+    Write-Warning "Stopping running DYS-fr bundle processes before rebuild..."
+    foreach ($process in $matchingProcesses) {
+        Write-Host ("  - PID {0}: {1}" -f $process.Id, $process.Path)
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+
+    Start-Sleep -Seconds 1
+}
+
 $pythonPath = Resolve-ProjectPath $PythonExe
 $stageScript = Join-Path $projectRoot "packaging\windows\stage_assets.py"
 $specPath = Join-Path $projectRoot "packaging\windows\dys_fr.spec"
@@ -43,6 +66,8 @@ $previousIncludeHybrid = $env:DYS_FR_INCLUDE_HYBRID
 $env:DYS_FR_INCLUDE_HYBRID = if ($IncludeHybrid) { "1" } else { "0" }
 
 try {
+    Stop-RunningBundleProcesses -BundleRoot $resolvedAppDistDir
+
     $stageArgs = @($stageScript, "--stage-root", $resolvedStageRoot)
     if ($JreDir) {
         $stageArgs += @("--jre-dir", $JreDir)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Iterable
 
@@ -73,6 +74,19 @@ def get_user_models_dir(*, create: bool = False) -> Path:
     path = get_user_data_dir(create=create) / "models"
     if create:
         path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_user_runtime_dir(*, create: bool = False) -> Path:
+    path = get_user_data_dir(create=create) / "run"
+    if create:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+        except OSError:
+            fallback = Path(tempfile.gettempdir()) / "dys-fr" / "run"
+            fallback.mkdir(parents=True, exist_ok=True)
+            return fallback
     return path
 
 
