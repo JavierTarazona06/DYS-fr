@@ -1,13 +1,20 @@
-﻿param(
+param(
     [string]$PythonExe = ".\.venv\Scripts\python.exe",
     [string]$JreDir = $env:DYS_FR_JRE_DIR,
     [string]$AppVersion = "0.1.0",
-    [string]$StageRoot = "build\staging\basic",
+    [string]$StageRoot = "",
     [string]$DistPath = "build\pyinstaller-dist",
+    [string]$RuntimeDistPath = "build\pyinstaller-runtime",
     [string]$WorkPath = "build\pyinstaller-work",
+    [string]$PortableWorkDir = "build\portable",
     [string]$InstallerOutputDir = "build\installer",
     [string]$IsccExe = "",
-    [switch]$IncludeHybrid
+    [string]$GccExe = "gcc",
+    [string]$RuntimeManifestUrl = "",
+    [string]$ReleaseBaseUrl = "",
+    [string]$MistralUrl = "https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+    [switch]$IncludeHybrid,
+    [switch]$BuildInstaller
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +30,14 @@ function Resolve-ProjectPath([string]$PathValue) {
     }
 
     return [System.IO.Path]::GetFullPath((Join-Path $projectRoot $PathValue))
+}
+
+function ConvertTo-CStringLiteral([string]$Value, [switch]$Wide) {
+    $escaped = $Value.Replace("\", "\\").Replace('"', '\"')
+    if ($Wide) {
+        return "L`"$escaped`""
+    }
+    return "`"$escaped`""
 }
 
 function Stop-RunningBundleProcesses([string]$BundleRoot) {
@@ -51,22 +66,49 @@ function Stop-RunningBundleProcesses([string]$BundleRoot) {
 $pythonPath = Resolve-ProjectPath $PythonExe
 $stageScript = Join-Path $projectRoot "packaging\windows\stage_assets.py"
 $specPath = Join-Path $projectRoot "packaging\windows\dys_fr.spec"
-$issPath = Join-Path $projectRoot "packaging\windows\installer.iss"
+$bootstrapSource = Join-Path $projectRoot "packaging\windows\portable_bootstrap.c"
+$portablePackager = Join-Path $projectRoot "packaging\windows\package_portable.py"
+$flavor = if ($IncludeHybrid) { "hybrid" } else { "basic" }
+if ([string]::IsNullOrWhiteSpace($StageRoot)) {
+    $StageRoot = "build\staging\$flavor"
+}
+
+$defaultReleaseBaseUrl = "https://github.com/JavierTarazona06/DYS-fr/releases/download/v$AppVersion"
+if ([string]::IsNullOrWhiteSpace($ReleaseBaseUrl)) {
+    $ReleaseBaseUrl = $defaultReleaseBaseUrl
+}
+$componentManifestName = "DYS-fr-components-$AppVersion-$flavor.json"
+if ([string]::IsNullOrWhiteSpace($RuntimeManifestUrl)) {
+    $RuntimeManifestUrl = "$($ReleaseBaseUrl.TrimEnd('/'))/$componentManifestName"
+}
+
 $resolvedStageRoot = Resolve-ProjectPath $StageRoot
 $resolvedDistPath = Resolve-ProjectPath $DistPath
+$resolvedRuntimeDistPath = Resolve-ProjectPath $RuntimeDistPath
 $resolvedWorkPath = Resolve-ProjectPath $WorkPath
-$resolvedInstallerOutputDir = Resolve-ProjectPath $InstallerOutputDir
-$resolvedAppDistDir = Join-Path $resolvedDistPath "DYS-fr"
+$resolvedPortableWorkDir = Resolve-ProjectPath $PortableWorkDir
+$resolvedRuntimeBundleDir = Join-Path $resolvedRuntimeDistPath "DYS-fr-runtime"
+$resolvedPortableExe = Join-Path $resolvedDistPath "DYS-fr.exe"
+$resolvedComponentManifest = Join-Path $resolvedDistPath $componentManifestName
+$resolvedLegacyAppDistDir = Join-Path $resolvedDistPath "DYS-fr"
+$resolvedBootstrapConfig = Join-Path $resolvedPortableWorkDir "portable_bootstrap_config.h"
 
 if (!(Test-Path $pythonPath)) {
     throw "Python interpreter not found at $pythonPath"
 }
 
+if (!(Get-Command $GccExe -ErrorAction SilentlyContinue)) {
+    throw "GCC compiler not found. Install MinGW-w64 or pass -GccExe with a compiler path."
+}
+
 $previousIncludeHybrid = $env:DYS_FR_INCLUDE_HYBRID
+$previousStageRoot = $env:DYS_FR_STAGE_ROOT
 $env:DYS_FR_INCLUDE_HYBRID = if ($IncludeHybrid) { "1" } else { "0" }
+$env:DYS_FR_STAGE_ROOT = $resolvedStageRoot
 
 try {
-    Stop-RunningBundleProcesses -BundleRoot $resolvedAppDistDir
+    Stop-RunningBundleProcesses -BundleRoot $resolvedRuntimeBundleDir
+    Stop-RunningBundleProcesses -BundleRoot $resolvedLegacyAppDistDir
 
     $stageArgs = @($stageScript, "--stage-root", $resolvedStageRoot)
     if ($JreDir) {
@@ -76,44 +118,66 @@ try {
         $stageArgs += "--include-hybrid"
     }
 
-    Write-Host "Staging runtime assets..."
+    Write-Host "Staging $flavor runtime assets..."
     & $pythonPath @stageArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Asset staging failed with exit code $LASTEXITCODE"
     }
 
-    Write-Host "Building PyInstaller bundle..."
-    & $pythonPath -m PyInstaller --noconfirm --clean --distpath $resolvedDistPath --workpath $resolvedWorkPath $specPath
+    Write-Host "Building PyInstaller runtime bundle..."
+    & $pythonPath -m PyInstaller --noconfirm --clean --distpath $resolvedRuntimeDistPath --workpath $resolvedWorkPath $specPath
     if ($LASTEXITCODE -ne 0) {
         throw "PyInstaller build failed with exit code $LASTEXITCODE"
     }
 
-    if (-not $IsccExe) {
-        $isccCandidates = @(
-            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
-            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
-        )
-        foreach ($candidate in $isccCandidates) {
-            if (Test-Path $candidate) {
-                $IsccExe = $candidate
-                break
-            }
-        }
+    New-Item -ItemType Directory -Force -Path $resolvedDistPath | Out-Null
+    New-Item -ItemType Directory -Force -Path $resolvedPortableWorkDir | Out-Null
+
+    if (Test-Path $resolvedLegacyAppDistDir) {
+        Remove-Item -Recurse -Force $resolvedLegacyAppDistDir
+    }
+    if (Test-Path $resolvedPortableExe) {
+        Remove-Item -Force $resolvedPortableExe
     }
 
-    if ($IsccExe -and (Test-Path $IsccExe)) {
-        New-Item -ItemType Directory -Force -Path $resolvedInstallerOutputDir | Out-Null
-        Write-Host "Building Inno Setup installer..."
-        & $IsccExe "/DAppVersion=$AppVersion" "/DAppDistDir=$resolvedAppDistDir" "/DOutputDir=$resolvedInstallerOutputDir" $issPath
-        if ($LASTEXITCODE -ne 0) {
-            throw "Inno Setup failed with exit code $LASTEXITCODE"
-        }
+    Write-Host "Packaging downloadable runtime components and release manifest..."
+    $packagerArgs = @(
+        $portablePackager,
+        "--runtime-root", $resolvedRuntimeBundleDir,
+        "--stage-root", $resolvedStageRoot,
+        "--output-dir", $resolvedDistPath,
+        "--output-manifest", $resolvedComponentManifest,
+        "--app-version", $AppVersion,
+        "--flavor", $flavor,
+        "--release-base-url", $ReleaseBaseUrl,
+        "--mistral-url", $MistralUrl
+    )
+    & $pythonPath @packagerArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Runtime component generation failed with exit code $LASTEXITCODE"
     }
-    else {
-        Write-Warning "ISCC.exe was not found. The PyInstaller bundle was created, but the installer step was skipped."
+
+    $configLines = @(
+        ("#define DYS_FR_MANIFEST_URL {0}" -f (ConvertTo-CStringLiteral $RuntimeManifestUrl -Wide)),
+        ("#define DYS_FR_APP_VERSION {0}" -f (ConvertTo-CStringLiteral $AppVersion)),
+        ("#define DYS_FR_FLAVOR {0}" -f (ConvertTo-CStringLiteral $flavor))
+    )
+    $configLines | Set-Content -Path $resolvedBootstrapConfig -Encoding ascii
+
+    Write-Host "Compiling lightweight downloader launcher..."
+    & $GccExe -O2 -Wall -Wextra -municode -mwindows "-I$resolvedPortableWorkDir" $bootstrapSource -o $resolvedPortableExe -lwinhttp -lbcrypt -lcomctl32
+    if ($LASTEXITCODE -ne 0) {
+        throw "Launcher compilation failed with exit code $LASTEXITCODE"
+    }
+
+    if ($BuildInstaller) {
+        Write-Warning "Inno Setup packaging is skipped. The primary artifact is the lightweight launcher plus component release assets."
     }
 
     Write-Host "Build complete."
+    Write-Host "Launcher: $resolvedPortableExe"
+    Write-Host "Component manifest: $resolvedComponentManifest"
+    Write-Host "Manifest URL compiled into launcher: $RuntimeManifestUrl"
 }
 finally {
     if ($null -eq $previousIncludeHybrid) {
@@ -121,5 +185,12 @@ finally {
     }
     else {
         $env:DYS_FR_INCLUDE_HYBRID = $previousIncludeHybrid
+    }
+
+    if ($null -eq $previousStageRoot) {
+        Remove-Item Env:DYS_FR_STAGE_ROOT -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:DYS_FR_STAGE_ROOT = $previousStageRoot
     }
 }

@@ -10,7 +10,7 @@ from PyInstaller.utils.hooks import (
 )
 
 PROJECT_ROOT = Path.cwd()
-STAGE_ROOT = PROJECT_ROOT / "build" / "staging" / "basic"
+STAGE_ROOT = Path(os.environ.get("DYS_FR_STAGE_ROOT", PROJECT_ROOT / "build" / "staging" / "basic"))
 INCLUDE_HYBRID = os.environ.get("DYS_FR_INCLUDE_HYBRID", "0").strip().lower() in {
     "1",
     "true",
@@ -50,11 +50,7 @@ def include_src_submodule(name: str) -> bool:
 datas = [
     (str(PROJECT_ROOT / "config.yaml"), "."),
     (str(PROJECT_ROOT / "app.py"), "."),
-    (str(STAGE_ROOT / "resources"), "resources"),
 ]
-
-if (STAGE_ROOT / "runtime").exists():
-    datas.append((str(STAGE_ROOT / "runtime"), "runtime"))
 
 datas += collect_data_files("streamlit")
 datas += collect_data_files("spacy")
@@ -109,7 +105,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="DYS-fr",
+    name="DYS-fr-runtime",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -124,5 +120,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="DYS-fr",
+    name="DYS-fr-runtime",
 )

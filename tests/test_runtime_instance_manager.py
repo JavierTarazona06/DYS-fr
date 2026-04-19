@@ -3,9 +3,38 @@
 import sys
 from pathlib import Path
 
+import psutil
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.runtime import instance_manager as im
+
+
+class _FakeProcess:
+    def __init__(self, pid: int, *, running: bool = True, wait_error: Exception | None = None):
+        self.pid = pid
+        self._running = running
+        self._wait_error = wait_error
+        self.terminated = False
+        self.killed = False
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+    def kill(self) -> None:
+        self.killed = True
+
+    def wait(self, timeout: float | None = None) -> int:
+        if self._wait_error is not None:
+            raise self._wait_error
+        self._running = False
+        return 0
+
+    def is_running(self) -> bool:
+        return self._running
+
+    def parents(self) -> list[object]:
+        return []
 
 
 def _make_instance() -> im.RunningInstance:
@@ -49,3 +78,19 @@ def test_is_instance_healthy_requires_both_endpoints(monkeypatch):
         lambda url, timeout_s: url == instance.ui_url,
     )
     assert not im.is_instance_healthy(instance)
+
+
+def test_cleanup_stale_instance_ignores_access_denied(monkeypatch):
+    instance = _make_instance()
+    process = _FakeProcess(
+        54321,
+        wait_error=psutil.AccessDenied(pid=54321),
+    )
+
+    monkeypatch.setattr(im, "_collect_instance_processes", lambda _: [process])
+
+    terminated = im.cleanup_stale_instance(instance)
+
+    assert terminated == []
+    assert process.terminated
+    assert process.killed

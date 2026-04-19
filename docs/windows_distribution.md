@@ -1,67 +1,73 @@
 # Windows Distribution
 
-This repository includes a packaging flow for a professional Windows release with:
+DYS-fr for Windows is distributed as a lightweight launcher plus downloadable runtime components.
 
-- a one-folder PyInstaller application bundle;
-- staged offline assets for basic mode;
-- an Inno Setup installer for a standard wizard experience.
+Public release artifacts:
 
-## Runtime design
+- `build/pyinstaller-dist/DYS-fr.exe`: lightweight launcher delivered to the client.
+- `build/pyinstaller-dist/DYS-fr-components-<version>-hybrid.json`: component manifest consumed by the launcher.
+- `build/pyinstaller-dist/DYS-fr-core-runtime-<version>-hybrid.zip`: PyInstaller runtime without heavy assets.
+- `build/pyinstaller-dist/DYS-fr-jre-<version>.zip`: embedded Java runtime.
+- `build/pyinstaller-dist/DYS-fr-languagetool-<version>.zip`: LanguageTool runtime.
+- `build/pyinstaller-dist/DYS-fr-spacy-fr_core_news_md-<version>.zip`: French spaCy model.
+- Mistral GGUF is downloaded directly from Hugging Face using the URL in the manifest.
 
-- The packaged executable uses `runner.py` as the entrypoint and delegates startup to `src/runtime/launcher.py`.
-- Streamlit runs in-process instead of `python -m streamlit`, which is safer for frozen execution.
-- LanguageTool is started through `src/runtime/languagetool.py` and prefers a bundled JRE under `runtime/jre`.
-- spaCy loads the French model from an extracted offline model directory under `resources/spacy/models/fr_core_news_md`, with wheel fallback if needed.
-- Optional Mistral models are searched in both `resources/models` and `%LOCALAPPDATA%\DYS-fr\models`.
+On first launch, `DYS-fr.exe` checks whether `DYS-fr-runtime.exe`, `_internal/`, and `DYS-fr-runtime-manifest.json` already exist next to it. If the local installation is valid, it launches without internet. If anything is missing or incompatible, it downloads the component manifest, installs each required component, writes the installed manifest, and launches `DYS-fr-runtime.exe`.
 
-## Build prerequisites
+If the launcher directory is not writable, DYS-fr shows a clear error asking the user to move `DYS-fr.exe` to a writable folder. It does not fall back to AppData because the portable contract is to keep `_internal` next to the executable.
 
-- Python environment with `requirements-base.txt` and `requirements-build.txt` installed.
-- A redistributable JRE directory available locally. The build script expects either:
-  - `runtime/jre` already present in the repository root, or
-  - `DYS_FR_JRE_DIR` pointing at a JRE root that contains `bin/java.exe`.
+## Runtime Design
+
+- PyInstaller builds the real application runtime under `build/pyinstaller-runtime/DYS-fr-runtime`.
+- The PyInstaller core runtime includes the app, Python, Streamlit, dependencies, and hybrid Python packages, but excludes the JRE, LanguageTool, spaCy model, and Mistral GGUF.
+- `packaging/windows/package_portable.py` creates component ZIPs and `DYS-fr-components-<version>-hybrid.json`.
+- `packaging/windows/portable_bootstrap.c` downloads via WinHTTP, validates SHA-256 with BCrypt, extracts ZIPs with PowerShell `Expand-Archive`, installs file components, and launches `DYS-fr-runtime.exe`.
+- The installed layout keeps the existing paths: `_internal/runtime/jre`, `_internal/resources/languagetool`, `_internal/resources/spacy/models/fr_core_news_md`, and `_internal/resources/models`.
+
+## Build Prerequisites
+
+- Python environment with `requirements-base.txt`, `requirements-build.txt`, and `requirements-hybrid.txt` installed.
+- MinGW-w64 `gcc` available on `PATH`, or pass `-GccExe`.
+- Windows PowerShell with `Expand-Archive`.
+- A redistributable JRE at `runtime/jre` or passed with `DYS_FR_JRE_DIR` / `-JreDir`.
 - Local LanguageTool assets under `resources/languagetool`.
-- Local spaCy wheel under `resources/spacy`.
+- Local spaCy wheel or extracted model under `resources/spacy`.
+- Local Mistral GGUF under `resources/models` so the build can calculate its SHA-256 for the manifest.
 
-## Build commands
-
-From the repository root:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-base.txt -r requirements-build.txt
-powershell -ExecutionPolicy Bypass -File .\packaging\windows\build.ps1 -JreDir C:\path\to\jdk-17-jre
-```
-
-Optional hybrid payload:
+## Build Command
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\packaging\windows\build.ps1 -JreDir C:\path\to\jdk-17-jre -IncludeHybrid
+.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt -r requirements-hybrid.txt
+powershell -ExecutionPolicy Bypass -File .\packaging\windows\build.ps1 -JreDir "C:\Program Files\Java\jdk-25" -IncludeHybrid
 ```
+
+The default manifest URL compiled into the launcher is:
+
+```text
+https://github.com/JavierTarazona06/DYS-fr/releases/download/v<AppVersion>/DYS-fr-components-<AppVersion>-hybrid.json
+```
+
+Use `-ReleaseBaseUrl`, `-RuntimeManifestUrl`, or `-MistralUrl` to point at alternate release locations.
 
 ## Outputs
 
-- Staged runtime payload: `build/staging/basic`
-- PyInstaller bundle: `build/pyinstaller-dist/DYS-fr`
-- Inno Setup installer: `build/installer`
+- Launcher: `build/pyinstaller-dist/DYS-fr.exe`
+- Component manifest: `build/pyinstaller-dist/DYS-fr-components-<version>-hybrid.json`
+- Core runtime ZIP: `build/pyinstaller-dist/DYS-fr-core-runtime-<version>-hybrid.zip`
+- JRE ZIP: `build/pyinstaller-dist/DYS-fr-jre-<version>.zip`
+- LanguageTool ZIP: `build/pyinstaller-dist/DYS-fr-languagetool-<version>.zip`
+- spaCy ZIP: `build/pyinstaller-dist/DYS-fr-spacy-fr_core_news_md-<version>.zip`
+- Intermediate PyInstaller runtime: `build/pyinstaller-runtime/DYS-fr-runtime`
+- Staged asset payload: `build/staging/hybrid`
 
-If Inno Setup is not installed, the build script still produces the PyInstaller bundle and skips only the installer step.
+Upload the JSON and GitHub-hosted ZIPs to the matching public GitHub Release before distributing the launcher. The Mistral URL in the manifest points to Hugging Face.
 
-## Smoke test
+## Smoke Test
 
-After a successful build, validate the packaged executable:
+After publishing release assets:
 
 ```powershell
-.\.venv\Scripts\python.exe .\packaging\windows\smoke_test.py --exe .\build\pyinstaller-dist\DYS-fr\DYS-fr.exe
+.\.venv\Scripts\python.exe .\packaging\windows\smoke_test.py --exe .\build\pyinstaller-dist\DYS-fr.exe
 ```
 
-The smoke test starts the packaged executable, waits for the local HTTP endpoint to answer with `200`, and then shuts the process tree down cleanly.
-
-## Basic vs hybrid distribution
-
-- Basic installer:
-  - bundles Python, Streamlit, LanguageTool, spaCy model, and embedded JRE;
-  - does not bundle Mistral;
-  - hides hybrid mode when optional AI runtimes are not installed.
-- Hybrid add-on:
-  - can stage the Mistral GGUF with `-IncludeHybrid`;
-  - still keeps Gemma as an external Ollama integration.
+For local testing, keep the generated component JSON and ZIPs next to `DYS-fr.exe`; the launcher will prefer adjacent component files before downloading.

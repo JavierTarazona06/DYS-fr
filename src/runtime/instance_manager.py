@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import contextlib
 import json
@@ -239,12 +239,12 @@ def cleanup_stale_instance(instance: RunningInstance) -> list[int]:
         with contextlib.suppress(psutil.Error):
             process.terminate()
 
-    _, alive = psutil.wait_procs(candidates, timeout=5)
+    _, alive = _wait_procs_safely(candidates, timeout=5)
     for process in alive:
         with contextlib.suppress(psutil.Error):
             process.kill()
 
-    psutil.wait_procs(alive, timeout=3)
+    _wait_procs_safely(alive, timeout=3)
 
     for process in candidates:
         with contextlib.suppress(psutil.Error):
@@ -260,8 +260,11 @@ def _collect_instance_processes(instance: RunningInstance) -> list[psutil.Proces
     owner = _get_process(instance.owner_pid)
     if owner is not None and _matches_owner_process(owner, instance):
         collected[owner.pid] = owner
-        for child in owner.children(recursive=True):
-            collected[child.pid] = child
+        try:
+            for child in owner.children(recursive=True):
+                collected[child.pid] = child
+        except psutil.Error:
+            pass
 
     if instance.mode == "frozen":
         bundle_root = _normalize_path(instance.bundle_root)
@@ -318,6 +321,30 @@ def _sort_processes_for_shutdown(processes: Iterable[psutil.Process]) -> list[ps
             return 0
 
     return sorted(processes, key=depth, reverse=True)
+
+
+def _wait_procs_safely(
+    processes: Iterable[psutil.Process],
+    *,
+    timeout: float,
+) -> tuple[list[psutil.Process], list[psutil.Process]]:
+    gone: list[psutil.Process] = []
+    alive: list[psutil.Process] = []
+    deadline = time.monotonic() + max(timeout, 0.0)
+
+    for process in processes:
+        remaining = max(0.0, deadline - time.monotonic())
+        try:
+            process.wait(timeout=remaining)
+            gone.append(process)
+        except psutil.TimeoutExpired:
+            alive.append(process)
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
+            gone.append(process)
+        except psutil.AccessDenied:
+            alive.append(process)
+
+    return gone, alive
 
 
 def _url_responds_ok(url: str, *, timeout_s: float) -> bool:
