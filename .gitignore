@@ -31,6 +31,7 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!packaging/windows/*.spec
 
 # Installer logs
 pip-log.txt
@@ -242,5 +243,11 @@ __marimo__/
 # Others
 *.pdf
 *.xlsx
+LanguageTool-6.7/
+.venv
+languagetool/
 .vscode/
 resources/
+.tmp_*.log
+build/staging/
+build/installer/

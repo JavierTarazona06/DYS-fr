@@ -1,0 +1,30 @@
+﻿{
+  "languagetool": {
+    "version": "6.8-SNAPSHOT",
+    "source_dir": "resources/languagetool",
+    "stage_target": "resources/languagetool",
+    "required": true
+  },
+  "spacy_model": {
+    "name": "fr_core_news_md",
+    "version": "3.8.0",
+    "source_wheel_glob": "resources/spacy/fr_core_news_md-*.whl",
+    "source_extracted_dir": "resources/spacy/models/fr_core_news_md",
+    "stage_target": "resources/spacy/models/fr_core_news_md",
+    "required": true
+  },
+  "jre": {
+    "vendor": "Temurin",
+    "minimum_major_version": 17,
+    "default_source": "runtime/jre",
+    "env_var": "DYS_FR_JRE_DIR",
+    "stage_target": "runtime/jre",
+    "required": true
+  },
+  "mistral": {
+    "filename": "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+    "source": "resources/models/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+    "stage_target": "resources/models/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+    "required_by_default": false
+  }
+}

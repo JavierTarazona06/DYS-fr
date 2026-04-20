@@ -1,0 +1,39 @@
+app:
+  host: 127.0.0.1
+  port: 8501
+  open_browser: true
+
+# Change between "lt" or "hybrid"
+improver: lt
+
+lt:
+  lang: fr
+  server:
+    host: 127.0.0.1
+    port: 8081
+    jar_path: resources/languagetool/languagetool-server.jar
+    jre_bin: auto
+    allow_origin: "*"
+    heap_mb: 256
+
+llm:
+  # Model to use: "mistral-7b-q4" or "gemma3-4b"
+  model: mistral-7b-q4
+  models_dir: resources/models
+
+  mistral:
+    filename: Mistral-7B-Instruct-v0.3-Q4_K_M.gguf
+    n_ctx: 4096
+    max_tokens: 526
+    temperature: 0.3
+
+  gemma:
+    model_name: "gemma3:4b"
+    timeout: 120
+    temperature: 0.1
+
+spacy:
+  model: fr_core_news_md
+  only_ner_pos: true
+  target_dir: resources/spacy
+  add_date_ruler: true
