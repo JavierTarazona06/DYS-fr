@@ -52,6 +52,9 @@ def test_core_zip_preserves_runtime_layout_and_excludes_heavy_assets(tmp_path):
     (runtime_root / "DYS-fr-runtime.exe").write_bytes(b"exe")
     (internal / "app.py").write_text("app", encoding="utf-8")
     (internal / "config.yaml").write_text("cfg", encoding="utf-8")
+    llama_lib = internal / "llama_cpp" / "lib"
+    llama_lib.mkdir(parents=True)
+    (llama_lib / "llama.dll").write_bytes(b"dll")
     zip_path = tmp_path / "core.zip"
 
     package_portable.assert_core_is_light(runtime_root)
@@ -62,7 +65,36 @@ def test_core_zip_preserves_runtime_layout_and_excludes_heavy_assets(tmp_path):
             "DYS-fr-runtime.exe",
             "_internal/app.py",
             "_internal/config.yaml",
+            "_internal/llama_cpp/lib/llama.dll",
         ]
+
+
+def test_hybrid_core_validation_requires_llama_cpp_runtime(tmp_path):
+    runtime_root = tmp_path / "runtime"
+    internal = runtime_root / "_internal"
+    internal.mkdir(parents=True)
+    (runtime_root / "DYS-fr-runtime.exe").write_bytes(b"exe")
+    (internal / "app.py").write_text("app", encoding="utf-8")
+    (internal / "config.yaml").write_text("cfg", encoding="utf-8")
+
+    component = package_portable.ComponentPackage(
+        component_id="core",
+        kind="zip",
+        display_name="core runtime",
+        source=runtime_root,
+        artifact=tmp_path / "core.zip",
+        url="https://example.test/core.zip",
+        target="",
+        validation_paths=package_portable.CORE_VALIDATION_PATHS
+        + package_portable.HYBRID_CORE_VALIDATION_PATHS,
+    )
+
+    try:
+        package_portable.component_validation_files(component)
+    except FileNotFoundError as exc:
+        assert "llama.dll" in str(exc)
+    else:  # pragma: no cover - explicit failure branch
+        raise AssertionError("Expected hybrid core validation to require llama_cpp runtime files")
 
 
 def test_core_light_check_rejects_staged_heavy_assets(tmp_path):

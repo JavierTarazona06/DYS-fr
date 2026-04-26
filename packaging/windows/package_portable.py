@@ -21,6 +21,9 @@ CORE_VALIDATION_PATHS = (
     "_internal/app.py",
     "_internal/config.yaml",
 )
+HYBRID_CORE_VALIDATION_PATHS = (
+    "_internal/llama_cpp/lib/llama.dll",
+)
 JRE_VALIDATION_PATHS = (
     "_internal/runtime/jre/bin/java.exe",
     "_internal/runtime/jre/bin/javaw.exe",
@@ -217,7 +220,11 @@ def main() -> int:
             artifact=output_dir / f"DYS-fr-core-runtime-{args.app_version}-{args.flavor}.zip",
             url=f"{release_base_url}/DYS-fr-core-runtime-{args.app_version}-{args.flavor}.zip",
             target="",
-            validation_paths=CORE_VALIDATION_PATHS,
+            validation_paths=(
+                CORE_VALIDATION_PATHS + HYBRID_CORE_VALIDATION_PATHS
+                if args.flavor == "hybrid"
+                else CORE_VALIDATION_PATHS
+            ),
         ),
         ComponentPackage(
             component_id="jre",

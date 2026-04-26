@@ -57,11 +57,18 @@ datas += collect_data_files("spacy")
 datas += copy_metadata("streamlit")
 datas += copy_metadata("spacy")
 datas += copy_metadata("language_tool_python")
+if INCLUDE_HYBRID:
+    datas += collect_data_files("llama_cpp")
+    datas += copy_metadata("llama_cpp_python")
+    datas += copy_metadata("ollama")
 
 hiddenimports = []
 hiddenimports += collect_submodules("streamlit", filter=include_streamlit_submodule)
 hiddenimports += collect_submodules("spacy", filter=include_spacy_submodule)
 hiddenimports += collect_submodules("src", filter=include_src_submodule)
+if INCLUDE_HYBRID:
+    hiddenimports += collect_submodules("llama_cpp")
+    hiddenimports += collect_submodules("ollama")
 hiddenimports += [
     "streamlit.web.cli",
     "streamlit.runtime.runtime",
