@@ -251,3 +251,7 @@ resources/
 .tmp_*.log
 build/staging/
 build/installer/
+
+# Local agent instruction files (not shared)
+AGENTS.md
+CLAUDE.md
