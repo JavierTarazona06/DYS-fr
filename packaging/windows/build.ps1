@@ -13,11 +13,22 @@ param(
     [string]$RuntimeManifestUrl = "",
     [string]$ReleaseBaseUrl = "",
     [string]$MistralUrl = "https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+    [switch]$IncludeAiRuntime,
+    [switch]$IncludeMistralModel,
     [switch]$IncludeHybrid,
     [switch]$BuildInstaller
 )
 
 $ErrorActionPreference = "Stop"
+
+# -IncludeHybrid conflated two orthogonal things: bundling the local-LLM runtime
+# (llama_cpp/ollama, read by dys_fr.spec) and staging the 4.1 GB GGUF (stage_assets.py).
+# Kept as an alias for both so documented invocations keep working.
+if ($IncludeHybrid) {
+    Write-Warning "-IncludeHybrid is deprecated. Use -IncludeAiRuntime and/or -IncludeMistralModel."
+    $IncludeAiRuntime = $true
+    $IncludeMistralModel = $true
+}
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 
 function Resolve-ProjectPath([string]$PathValue) {
@@ -68,7 +79,7 @@ $stageScript = Join-Path $projectRoot "packaging\windows\stage_assets.py"
 $specPath = Join-Path $projectRoot "packaging\windows\dys_fr.spec"
 $bootstrapSource = Join-Path $projectRoot "packaging\windows\portable_bootstrap.c"
 $portablePackager = Join-Path $projectRoot "packaging\windows\package_portable.py"
-$flavor = if ($IncludeHybrid) { "hybrid" } else { "basic" }
+$flavor = if ($IncludeAiRuntime) { "hybrid" } else { "basic" }
 if ([string]::IsNullOrWhiteSpace($StageRoot)) {
     $StageRoot = "build\staging\$flavor"
 }
@@ -103,7 +114,7 @@ if (!(Get-Command $GccExe -ErrorAction SilentlyContinue)) {
 
 $previousIncludeHybrid = $env:DYS_FR_INCLUDE_HYBRID
 $previousStageRoot = $env:DYS_FR_STAGE_ROOT
-$env:DYS_FR_INCLUDE_HYBRID = if ($IncludeHybrid) { "1" } else { "0" }
+$env:DYS_FR_INCLUDE_HYBRID = if ($IncludeAiRuntime) { "1" } else { "0" }
 $env:DYS_FR_STAGE_ROOT = $resolvedStageRoot
 
 try {
@@ -114,7 +125,7 @@ try {
     if ($JreDir) {
         $stageArgs += @("--jre-dir", $JreDir)
     }
-    if ($IncludeHybrid) {
+    if ($IncludeMistralModel) {
         $stageArgs += "--include-hybrid"
     }
 
