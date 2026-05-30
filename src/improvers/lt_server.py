@@ -1,6 +1,12 @@
 import os, time, subprocess, signal, contextlib, sys, shutil
+import logging
 from pathlib import Path
 import urllib.request
+
+from src.utils.logging_setup import get_languagetool_log_path
+from src.utils.paths import is_frozen
+
+log = logging.getLogger(__name__)
 
 class LanguageToolServer(contextlib.AbstractContextManager):
     def __init__(self, host: str, port: int, jre_bin: str, jar_path: str,
@@ -13,6 +19,7 @@ class LanguageToolServer(contextlib.AbstractContextManager):
         self.heap_mb = int(heap_mb)
         self.lt_args = lt_args if lt_args is not None else [] # Initialize lt_args
         self.proc: subprocess.Popen | None = None
+        self._log_handle = None
 
     @property
     def url(self) -> str:
@@ -80,16 +87,32 @@ class LanguageToolServer(contextlib.AbstractContextManager):
 
         creationflags = 0
         if os.name == "nt":
-            # Create a new process group so we can terminate cleanly on Windows
-            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            # New process group so we can terminate cleanly. CREATE_NO_WINDOW stops the
+            # JVM from allocating its own console: the packaged app is windowed, so
+            # without it Windows flashes a console at every launch.
+            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
+                subprocess, "CREATE_NO_WINDOW", 0
+            )
 
-        print(f"Starting LanguageTool server: {' '.join(args)}")
+        log.info("Starting LanguageTool server: %s", " ".join(args))
 
-        # Inherit stdout/stderr so we don't block on a full pipe if LT logs a lot
+        # Never a pipe: LT is chatty and a full pipe would block the JVM. In a frozen
+        # build the inherited handles are invalid, so send the output to a file the
+        # user can send us; in development, inherit so it shows up in the terminal.
+        stdout_target = None
+        if is_frozen():
+            lt_log_path = get_languagetool_log_path(create=True)
+            if lt_log_path is not None:
+                try:
+                    self._log_handle = open(lt_log_path, "ab", buffering=0)
+                    stdout_target = self._log_handle
+                except OSError:
+                    self._log_handle = None
+
         self.proc = subprocess.Popen(
             args,
-            stdout=None,
-            stderr=None,
+            stdout=stdout_target,
+            stderr=subprocess.STDOUT if stdout_target is not None else None,
             env=env,
             creationflags=creationflags,
         )

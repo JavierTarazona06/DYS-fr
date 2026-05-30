@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+import ctypes
+import logging
 import os
 import socket
 import sys
@@ -22,10 +24,35 @@ from src.runtime.instance_manager import (
 )
 from src.runtime.languagetool import create_lt_server
 from src.utils.config import load_config
+from src.utils.logging_setup import configure_logging
 from src.utils.paths import resolve_runtime_path
 
 INSTANCE_REUSE_WAIT_S = 20.0
 LOCK_RECOVERY_TIMEOUT_S = 10.0
+
+# Must match AppMutex in packaging/windows/installer.iss so the installer can
+# detect a running instance and ask the user to close it before upgrading.
+# Session-local, not "Global\\": creating a global object needs a privilege a
+# standard user does not hold.
+APP_MUTEX_NAME = "DYS-fr-{8EFBD1E9-CC98-4D95-8C98-D0C7F0A0E6E8}"
+
+# Module-level so the handle outlives the function and the mutex stays held
+# for the lifetime of the process.
+_app_mutex_handle = None
+
+log = logging.getLogger(__name__)
+
+
+def _create_app_mutex() -> None:
+    """Publish the named mutex the Inno Setup installer looks for."""
+    global _app_mutex_handle
+    if os.name != "nt":
+        return
+    try:
+        _app_mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, APP_MUTEX_NAME)
+    except Exception:
+        # Never block startup over the upgrade-detection nicety.
+        log.warning("Could not create the application mutex", exc_info=True)
 
 
 def _is_port_free(host: str, port: int) -> bool:
@@ -114,6 +141,10 @@ def _cleanup_registered_instance() -> None:
 
 
 def main() -> int:
+    log_path = configure_logging()
+    _create_app_mutex()
+    log.info("DYS-fr starting (log: %s)", log_path)
+
     cfg = load_config()
     app_cfg = cfg.get("app", {})
     lt_server_cfg = cfg.get("lt", {}).get("server", {})

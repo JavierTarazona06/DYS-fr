@@ -10,7 +10,7 @@ import spacy
 from spacy.language import Language
 from spacy.pipeline import EntityRuler
 
-from src.utils.paths import resolve_runtime_path
+from src.utils.paths import is_frozen, resolve_runtime_path
 
 DATE_RULER_NAME = "guardrails_date_ruler"
 MONTH_NAMES: tuple[str, ...] = (
@@ -143,25 +143,35 @@ def load_french_nlp(
         disable = ("parser",)
     model_name = str(model)
 
-    try:
-        nlp = spacy.load(model_name, disable=disable)
-    except OSError:
-        path_model = Path(model_name)
-        if path_model.exists():
-            nlp = spacy.load(path_model, disable=disable)  # type: ignore[arg-type]
-        else:
-            resolved_target_dir = (
-                resolve_runtime_path("resources", "spacy")
-                if target_dir is None
-                else (Path(target_dir) if Path(target_dir).is_absolute() else resolve_runtime_path(target_dir))
-            )
+    resolved_target_dir = (
+        resolve_runtime_path("resources", "spacy")
+        if target_dir is None
+        else (Path(target_dir) if Path(target_dir).is_absolute() else resolve_runtime_path(target_dir))
+    )
 
-            extracted_dir = _resolve_extracted_model_dir(model_name, resolved_target_dir)
-            if extracted_dir is not None:
-                nlp = spacy.load(extracted_dir, disable=disable)  # type: ignore[arg-type]
+    nlp = None
+    if is_frozen():
+        # Frozen builds ship the model as a staged directory, not an installed
+        # package: PyInstaller does not collect fr_core_news_md. Resolve it up front
+        # instead of relying on spacy.load(model_name) happening to raise OSError.
+        staged_dir = _resolve_extracted_model_dir(model_name, resolved_target_dir)
+        if staged_dir is not None:
+            nlp = spacy.load(staged_dir, disable=disable)  # type: ignore[arg-type]
+
+    if nlp is None:
+        try:
+            nlp = spacy.load(model_name, disable=disable)
+        except OSError:
+            path_model = Path(model_name)
+            if path_model.exists():
+                nlp = spacy.load(path_model, disable=disable)  # type: ignore[arg-type]
             else:
-                extracted_model_dir = _extract_model_from_wheel(model_name, resolved_target_dir)
-                nlp = spacy.load(extracted_model_dir, disable=disable)  # type: ignore[arg-type]
+                extracted_dir = _resolve_extracted_model_dir(model_name, resolved_target_dir)
+                if extracted_dir is not None:
+                    nlp = spacy.load(extracted_dir, disable=disable)  # type: ignore[arg-type]
+                else:
+                    extracted_model_dir = _extract_model_from_wheel(model_name, resolved_target_dir)
+                    nlp = spacy.load(extracted_model_dir, disable=disable)  # type: ignore[arg-type]
     # If you disabled the parser and need sentences, ensure senter is available
     if only_ner_pos:
         if "senter" in nlp.component_names:
