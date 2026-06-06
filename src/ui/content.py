@@ -36,8 +36,24 @@ class Content:
     SECTION_RESULT = "Texte corrigé"
     SECTION_DIFF = "Voir les différences"
 
+    BOOT_TITLE = "Démarrage de DYS-fr…"
+    BOOT_SPACY = "Chargement du modèle linguistique…"
+    BOOT_LT = "Connexion au correcteur LanguageTool…"
+    BOOT_DONE = "DYS-fr est prêt"
+    BOOT_LT_WAITING = (
+        "Le correcteur LanguageTool démarre. Au premier lancement, cela peut "
+        "prendre une trentaine de secondes."
+    )
+
     ERR_NO_TEXT = "Veuillez entrer du texte à corriger."
     ERR_MODEL_NOT_FOUND = "Modèle IA introuvable"
+
+    @staticmethod
+    def port_fallback(url: str) -> str:
+        return (
+            f"Le port habituel était occupé. DYS-fr est accessible à cette "
+            f"adresse : {url}"
+        )
 
     @staticmethod
     def install_instructions(model_name: str) -> str:

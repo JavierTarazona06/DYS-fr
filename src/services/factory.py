@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import urllib.request
 from importlib.util import find_spec
 
 import streamlit as st
@@ -44,6 +45,21 @@ def get_nlp(cfg):
         only_ner_pos=spacy_cfg.get("only_ner_pos", True),
         add_date_ruler=spacy_cfg.get("add_date_ruler", False),
     )
+
+
+def probe_lt(cfg, timeout_s: float = 0.5) -> bool:
+    """Cheap liveness check for the LanguageTool server.
+
+    Deliberately uncached and deliberately not routed through LTClient: that
+    constructor issues a request with a 5s timeout and raises on failure, which
+    would stall every poll while the JVM is still starting.
+    """
+    lt_url, _ = _resolve_lt_runtime_settings(cfg)
+    try:
+        with urllib.request.urlopen(f"{lt_url}/v2/languages", timeout=timeout_s) as response:
+            return response.status == 200
+    except Exception:
+        return False
 
 
 @st.cache_data

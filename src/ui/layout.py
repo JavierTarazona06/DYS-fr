@@ -1,4 +1,6 @@
 # src/ui/layout.py
+import os
+
 import streamlit as st
 
 from src.ui.content import Content
@@ -19,6 +21,9 @@ def render_header():
 def render_sidebar(capabilities: dict):
     """Render sidebar and return the selected mode plus model key."""
     st.sidebar.title(Content.SIDEBAR_TITLE)
+
+    if os.getenv("DYS_FR_UI_PORT_FALLBACK") == "1":
+        st.sidebar.warning(Content.port_fallback(os.getenv("DYS_FR_UI_URL", "")))
 
     mode_options = [Content.MODE_LIGHT]
     if capabilities.get("hybrid_available"):

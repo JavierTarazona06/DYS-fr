@@ -61,13 +61,19 @@ def _is_port_free(host: str, port: int) -> bool:
         return sock.connect_ex((host, port)) != 0
 
 
-def _find_available_port(host: str, preferred_port: int) -> int:
+def _find_available_port(host: str, preferred_port: int) -> tuple[int, bool]:
+    """Return (port, changed). `changed` is True when the preferred port was busy.
+
+    Note the check is advisory: the probe socket is closed before the caller binds,
+    so a racing process can still take the port. Callers report the change, they do
+    not rely on it being reserved.
+    """
     if preferred_port > 0 and _is_port_free(host, preferred_port):
-        return preferred_port
+        return preferred_port, False
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((host, 0))
-        return int(sock.getsockname()[1])
+        return int(sock.getsockname()[1]), True
 
 
 def _wait_http_ready(url: str, timeout_s: float = 40.0) -> bool:
@@ -93,6 +99,22 @@ def _open_browser_when_ready(url: str, *, enabled: bool, timeout_s: float = 40.0
 
     thread = threading.Thread(target=_worker, daemon=True)
     thread.start()
+
+
+def _spawn_lt_health_logger(lt_server, timeout_s: float = 60.0) -> None:
+    """Record LanguageTool readiness without blocking startup.
+
+    The UI polls the server itself; this only leaves a trace for support.
+    """
+
+    def _worker() -> None:
+        try:
+            lt_server.wait_healthy(timeout_s=timeout_s)
+            log.info("LanguageTool ready at %s", lt_server.url)
+        except Exception:
+            log.error("LanguageTool was not healthy after %ss", timeout_s, exc_info=True)
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def _run_streamlit(app_script: Path, port: int) -> int:
@@ -176,11 +198,18 @@ def main() -> int:
             clear_instance()
 
         ui_host = app_cfg.get("host", "127.0.0.1")
-        ui_port = _find_available_port(ui_host, int(os.getenv("STREAMLIT_PORT", app_cfg.get("port", 8501))))
+        preferred_ui_port = int(os.getenv("STREAMLIT_PORT", app_cfg.get("port", 8501)))
+        ui_port, ui_port_changed = _find_available_port(ui_host, preferred_ui_port)
         lt_host = lt_server_cfg.get("host", "127.0.0.1")
-        lt_port = _find_available_port(lt_host, int(lt_server_cfg.get("port", 8081)))
+        preferred_lt_port = int(lt_server_cfg.get("port", 8081))
+        lt_port, lt_port_changed = _find_available_port(lt_host, preferred_lt_port)
         ui_url = f"http://{ui_host}:{ui_port}"
         lt_server = create_lt_server(cfg=cfg, port=lt_port)
+
+        if ui_port_changed:
+            log.warning("Port %s is busy; serving the interface on %s.", preferred_ui_port, ui_port)
+        if lt_port_changed:
+            log.warning("Port %s is busy; LanguageTool will listen on %s.", preferred_lt_port, lt_port)
 
         register_instance(
             build_instance_metadata(
@@ -190,11 +219,21 @@ def main() -> int:
             )
         )
 
+        # Streamlit runs inside this process, so the environment has to be set before
+        # it imports the service factory (src/services/factory.py reads LT_URL).
+        os.environ["LT_URL"] = lt_server.url
+        os.environ["LT_LANG"] = cfg["lt"]["lang"]
+        os.environ["DYS_FR_UI_URL"] = ui_url
+        os.environ["DYS_FR_UI_PORT_FALLBACK"] = "1" if ui_port_changed else "0"
+
         try:
-            with lt_server as server:
-                os.environ["LT_URL"] = server.url
-                os.environ["LT_LANG"] = cfg["lt"]["lang"]
-                _open_browser_when_ready(ui_url, enabled=open_browser)
-                return _run_streamlit(app_script, ui_port)
+            # Start LanguageTool but do not wait for it. The JVM needs up to 25s to
+            # answer, and blocking here is what left the user looking at nothing;
+            # the UI now appears first and reports LanguageTool's readiness itself.
+            lt_server.start()
+            _spawn_lt_health_logger(lt_server)
+            _open_browser_when_ready(ui_url, enabled=open_browser)
+            return _run_streamlit(app_script, ui_port)
         finally:
+            lt_server.stop()
             clear_instance()
