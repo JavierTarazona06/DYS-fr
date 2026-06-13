@@ -16,7 +16,11 @@ param(
     [switch]$IncludeAiRuntime,
     [switch]$IncludeMistralModel,
     [switch]$IncludeHybrid,
-    [switch]$BuildInstaller
+    [ValidateSet('installer', 'portable', 'both')]
+    [string]$Channel = 'installer',
+    [string]$SignToolExe = "",
+    [string]$SignCertThumbprint = "",
+    [string]$SignTimestampUrl = "http://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,6 +53,47 @@ function ConvertTo-CStringLiteral([string]$Value, [switch]$Wide) {
         return "L`"$escaped`""
     }
     return "`"$escaped`""
+}
+
+function Resolve-IsccExe([string]$Explicit) {
+    if ($Explicit) {
+        if (!(Test-Path $Explicit)) {
+            throw "Inno Setup compiler not found at $Explicit"
+        }
+        return $Explicit
+    }
+
+    $candidates = @(
+        (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
+        (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    $onPath = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+    if ($onPath) {
+        return $onPath.Source
+    }
+
+    # Deliberately fatal. The previous pipeline warned and continued, which is how the
+    # installer silently rotted for five months while the build still reported success.
+    throw "Inno Setup 6.3+ is required for -Channel installer. Install it or pass -IsccExe."
+}
+
+function Invoke-CodeSign([string]$Path) {
+    if (!$SignCertThumbprint) {
+        Write-Warning "UNSIGNED: $Path -- SmartScreen will warn end users. See docs/windows_release_checklist.md."
+        return
+    }
+
+    $signTool = if ($SignToolExe) { $SignToolExe } else { (Get-Command "signtool.exe" -ErrorAction Stop).Source }
+    & $signTool sign /sha1 $SignCertThumbprint /fd SHA256 /tr $SignTimestampUrl /td SHA256 $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "Code signing failed for $Path with exit code $LASTEXITCODE"
+    }
 }
 
 function Stop-RunningBundleProcesses([string]$BundleRoot) {
@@ -103,13 +148,23 @@ $resolvedPortableExe = Join-Path $resolvedDistPath "DYS-fr.exe"
 $resolvedComponentManifest = Join-Path $resolvedDistPath $componentManifestName
 $resolvedLegacyAppDistDir = Join-Path $resolvedDistPath "DYS-fr"
 $resolvedBootstrapConfig = Join-Path $resolvedPortableWorkDir "portable_bootstrap_config.h"
+$resolvedInstallerOutputDir = Resolve-ProjectPath $InstallerOutputDir
+$issPath = Join-Path $projectRoot "packaging\windows\installer.iss"
 
 if (!(Test-Path $pythonPath)) {
     throw "Python interpreter not found at $pythonPath"
 }
 
-if (!(Get-Command $GccExe -ErrorAction SilentlyContinue)) {
-    throw "GCC compiler not found. Install MinGW-w64 or pass -GccExe with a compiler path."
+if ($Channel -in 'portable', 'both') {
+    if (!(Get-Command $GccExe -ErrorAction SilentlyContinue)) {
+        throw "GCC compiler not found. Install MinGW-w64 or pass -GccExe with a compiler path."
+    }
+}
+
+$isccExePath = $null
+if ($Channel -in 'installer', 'both') {
+    $isccExePath = Resolve-IsccExe $IsccExe
+    Write-Host "Inno Setup compiler: $isccExePath"
 }
 
 $previousIncludeHybrid = $env:DYS_FR_INCLUDE_HYBRID
@@ -135,6 +190,13 @@ try {
         throw "Asset staging failed with exit code $LASTEXITCODE"
     }
 
+    if ($Channel -in 'installer', 'both') {
+        $stagedModelsDir = Join-Path $resolvedStageRoot "resources\models"
+        if ((Test-Path $stagedModelsDir) -and (Get-ChildItem $stagedModelsDir -File -Recurse -ErrorAction SilentlyContinue)) {
+            throw "Stage root contains $stagedModelsDir. The installer channel ships no model; the download happens in-app."
+        }
+    }
+
     Write-Host "Building PyInstaller runtime bundle..."
     & $pythonPath -m PyInstaller --noconfirm --clean --distpath $resolvedRuntimeDistPath --workpath $resolvedWorkPath $specPath
     if ($LASTEXITCODE -ne 0) {
@@ -142,53 +204,84 @@ try {
     }
 
     New-Item -ItemType Directory -Force -Path $resolvedDistPath | Out-Null
-    New-Item -ItemType Directory -Force -Path $resolvedPortableWorkDir | Out-Null
 
     if (Test-Path $resolvedLegacyAppDistDir) {
         Remove-Item -Recurse -Force $resolvedLegacyAppDistDir
     }
-    if (Test-Path $resolvedPortableExe) {
-        Remove-Item -Force $resolvedPortableExe
+
+    Invoke-CodeSign (Join-Path $resolvedRuntimeBundleDir "DYS-fr-runtime.exe")
+
+    if ($Channel -in 'portable', 'both') {
+        New-Item -ItemType Directory -Force -Path $resolvedPortableWorkDir | Out-Null
+        if (Test-Path $resolvedPortableExe) {
+            Remove-Item -Force $resolvedPortableExe
+        }
+
+        Write-Host "Packaging downloadable runtime components and release manifest..."
+        $packagerArgs = @(
+            $portablePackager,
+            "--runtime-root", $resolvedRuntimeBundleDir,
+            "--stage-root", $resolvedStageRoot,
+            "--output-dir", $resolvedDistPath,
+            "--output-manifest", $resolvedComponentManifest,
+            "--app-version", $AppVersion,
+            "--flavor", $flavor,
+            "--release-base-url", $ReleaseBaseUrl,
+            "--mistral-url", $MistralUrl
+        )
+        & $pythonPath @packagerArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Runtime component generation failed with exit code $LASTEXITCODE"
+        }
+
+        $configLines = @(
+            ("#define DYS_FR_MANIFEST_URL {0}" -f (ConvertTo-CStringLiteral $RuntimeManifestUrl -Wide)),
+            ("#define DYS_FR_APP_VERSION {0}" -f (ConvertTo-CStringLiteral $AppVersion)),
+            ("#define DYS_FR_FLAVOR {0}" -f (ConvertTo-CStringLiteral $flavor))
+        )
+        $configLines | Set-Content -Path $resolvedBootstrapConfig -Encoding ascii
+
+        Write-Host "Compiling lightweight downloader launcher..."
+        & $GccExe -O2 -Wall -Wextra -municode -mwindows "-I$resolvedPortableWorkDir" $bootstrapSource -o $resolvedPortableExe -lwinhttp -lbcrypt -lcomctl32
+        if ($LASTEXITCODE -ne 0) {
+            throw "Launcher compilation failed with exit code $LASTEXITCODE"
+        }
     }
 
-    Write-Host "Packaging downloadable runtime components and release manifest..."
-    $packagerArgs = @(
-        $portablePackager,
-        "--runtime-root", $resolvedRuntimeBundleDir,
-        "--stage-root", $resolvedStageRoot,
-        "--output-dir", $resolvedDistPath,
-        "--output-manifest", $resolvedComponentManifest,
-        "--app-version", $AppVersion,
-        "--flavor", $flavor,
-        "--release-base-url", $ReleaseBaseUrl,
-        "--mistral-url", $MistralUrl
-    )
-    & $pythonPath @packagerArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Runtime component generation failed with exit code $LASTEXITCODE"
-    }
+    $setupExe = $null
+    if ($Channel -in 'installer', 'both') {
+        New-Item -ItemType Directory -Force -Path $resolvedInstallerOutputDir | Out-Null
 
-    $configLines = @(
-        ("#define DYS_FR_MANIFEST_URL {0}" -f (ConvertTo-CStringLiteral $RuntimeManifestUrl -Wide)),
-        ("#define DYS_FR_APP_VERSION {0}" -f (ConvertTo-CStringLiteral $AppVersion)),
-        ("#define DYS_FR_FLAVOR {0}" -f (ConvertTo-CStringLiteral $flavor))
-    )
-    $configLines | Set-Content -Path $resolvedBootstrapConfig -Encoding ascii
+        Write-Host "Compiling Inno Setup installer (this takes a while over ~1.2 GB)..."
+        & $isccExePath `
+            "/DAppVersion=$AppVersion" `
+            "/DRuntimeDir=$resolvedRuntimeBundleDir" `
+            "/DStageDir=$resolvedStageRoot" `
+            "/DOutputDir=$resolvedInstallerOutputDir" `
+            $issPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
+        }
 
-    Write-Host "Compiling lightweight downloader launcher..."
-    & $GccExe -O2 -Wall -Wextra -municode -mwindows "-I$resolvedPortableWorkDir" $bootstrapSource -o $resolvedPortableExe -lwinhttp -lbcrypt -lcomctl32
-    if ($LASTEXITCODE -ne 0) {
-        throw "Launcher compilation failed with exit code $LASTEXITCODE"
-    }
-
-    if ($BuildInstaller) {
-        Write-Warning "Inno Setup packaging is skipped. The primary artifact is the lightweight launcher plus component release assets."
+        $setupExe = Join-Path $resolvedInstallerOutputDir "DYS-fr-Setup-$AppVersion.exe"
+        if (!(Test-Path $setupExe)) {
+            throw "Inno Setup reported success but $setupExe is missing."
+        }
+        Invoke-CodeSign $setupExe
     }
 
     Write-Host "Build complete."
-    Write-Host "Launcher: $resolvedPortableExe"
-    Write-Host "Component manifest: $resolvedComponentManifest"
-    Write-Host "Manifest URL compiled into launcher: $RuntimeManifestUrl"
+    if ($setupExe) {
+        $setupSizeMb = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)
+        $setupHash = (Get-FileHash $setupExe -Algorithm SHA256).Hash
+        Write-Host "Installer: $setupExe ($setupSizeMb MB)"
+        Write-Host "SHA-256:   $setupHash"
+    }
+    if ($Channel -in 'portable', 'both') {
+        Write-Host "Launcher: $resolvedPortableExe"
+        Write-Host "Component manifest: $resolvedComponentManifest"
+        Write-Host "Manifest URL compiled into launcher: $RuntimeManifestUrl"
+    }
 }
 finally {
     if ($null -eq $previousIncludeHybrid) {
