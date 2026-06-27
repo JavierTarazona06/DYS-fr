@@ -8,6 +8,7 @@ from importlib.util import find_spec
 import streamlit as st
 
 from src.guardrails.spacy_loader import load_french_nlp
+from src.services import model_catalog
 from src.improvers.lt_improver import LTImprover
 from src.utils.config import load_config
 from src.utils.paths import find_model_file
@@ -95,6 +96,10 @@ def get_runtime_capabilities(cfg):
         "available_models": available_models,
         "reasons": reasons,
         "mistral_candidates": mistral_candidates,
+        # Lets the UI tell "this build has no AI engine" (nothing the user can do)
+        # apart from "the model is not downloaded yet" (offer the download button).
+        "llama_cpp_available": bool(find_spec("llama_cpp")),
+        "downloadable_models": model_catalog.missing_entries(cfg),
     }
 
 

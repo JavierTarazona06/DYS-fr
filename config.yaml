@@ -21,6 +21,18 @@ llm:
   model: mistral-7b-q4
   models_dir: resources/models
 
+  # Models the application can fetch on demand. The installer ships no GGUF; a user
+  # config at %LOCALAPPDATA%\DYS-fr\config.yaml can override url/sha256 if the
+  # upstream file is ever replaced.
+  downloads:
+    - id: mistral-7b-q4
+      display_name: Mistral 7B Instruct v0.3 (Q4_K_M)
+      filename: Mistral-7B-Instruct-v0.3-Q4_K_M.gguf
+      url: https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf
+      size_bytes: 4372812000
+      sha256: 1270d22c0fbb3d092fb725d4d96c457b7b687a5f5a715abe1e818da303e562b6
+      min_ram_gb: 8
+
   mistral:
     filename: Mistral-7B-Instruct-v0.3-Q4_K_M.gguf
     n_ctx: 4096

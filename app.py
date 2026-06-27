@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.services import factory
-from src.ui import layout
+from src.ui import layout, model_manager
 from src.ui.content import Content
 
 st.set_page_config(page_title="DYS-fr", layout="wide", page_icon="🧠")
@@ -52,6 +52,7 @@ if not lt_ready:
     st.stop()
 
 mode, model_key = layout.render_sidebar(capabilities)
+model_manager.render_model_panel(cfg, capabilities)
 
 improver = None
 if mode == Content.MODE_LIGHT:

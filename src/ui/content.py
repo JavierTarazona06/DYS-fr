@@ -45,8 +45,34 @@ class Content:
         "prendre une trentaine de secondes."
     )
 
+    MODEL_PANEL_TITLE = "Modèle IA local"
+    MODEL_NOT_INSTALLED = "Le modèle IA n'est pas encore téléchargé."
+    NO_AI_RUNTIME = "Cette installation n'inclut pas le moteur IA."
+    BTN_DOWNLOAD_MODEL = "Télécharger"
+    BTN_CANCEL_DOWNLOAD = "Annuler"
+    DL_VERIFYING = "Vérification de l'intégrité…"
+    DL_DONE = "Modèle installé. Le mode IA est maintenant disponible."
+    DL_CANCELLED = "Téléchargement interrompu. Il reprendra où il s'est arrêté."
+
     ERR_NO_TEXT = "Veuillez entrer du texte à corriger."
     ERR_MODEL_NOT_FOUND = "Modèle IA introuvable"
+
+    @staticmethod
+    def download_size(size_bytes: int) -> str:
+        return f"{size_bytes / (1024 ** 3):.1f} Go"
+
+    @staticmethod
+    def download_progress(done_bytes: int, total_bytes: int) -> str:
+        done = done_bytes / (1024 ** 3)
+        total = total_bytes / (1024 ** 3)
+        return f"Téléchargement : {done:.2f} / {total:.2f} Go"
+
+    @staticmethod
+    def ram_warning(required_gb: int, available_gb: int) -> str:
+        return (
+            f"Ce modèle demande environ {required_gb} Go de mémoire vive ; "
+            f"cet ordinateur en a {available_gb} Go. Le mode IA risque d'être très lent."
+        )
 
     @staticmethod
     def port_fallback(url: str) -> str:
