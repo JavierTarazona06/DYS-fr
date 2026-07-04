@@ -1,68 +1,85 @@
 # Windows Release Checklist
 
+For the installer channel, which is what the client receives. See
+[windows_distribution.md](windows_distribution.md) for the portable channel.
+
 ## Pre-build
 
 - Confirm the branch is the intended release branch.
 - Confirm `resources/languagetool` exists and contains `languagetool-server.jar`.
 - Confirm `resources/spacy` contains either `models/fr_core_news_md` or a `fr_core_news_md-*.whl`.
-- Confirm `resources/models/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf` exists so the manifest can record its size and SHA-256.
 - Confirm a redistributable JRE is available at `runtime/jre` or through `DYS_FR_JRE_DIR` / `-JreDir`.
-- Confirm MinGW-w64 `gcc` is available, or pass `-GccExe`.
+- Confirm **Inno Setup 6.3+** is installed (`ISCC.exe`), or pass `-IsccExe`.
 - Confirm the environment has `requirements-build.txt` and `requirements-hybrid.txt` installed.
+- Run the offline test suite: `pytest tests/test_installer_layout.py tests/test_model_downloader.py tests/test_windows_portable_packager.py -q`.
+
+The Mistral GGUF is **not** required for this channel and must not be staged.
 
 ## Build
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\packaging\windows\build.ps1 -JreDir "C:\Program Files\Java\jdk-25" -IncludeHybrid
+powershell -ExecutionPolicy Bypass -File .\packaging\windows\build.ps1 `
+  -Channel installer -IncludeAiRuntime -JreDir "C:\Program Files\Java\jdk-25"
 ```
 
 Verify:
 
 - `build/staging/hybrid/staging-manifest.json` was created.
-- `build/pyinstaller-runtime/DYS-fr-runtime/DYS-fr-runtime.exe` exists as the intermediate core runtime.
-- `build/pyinstaller-dist/DYS-fr.exe` exists and is a lightweight launcher.
-- `build/pyinstaller-dist/DYS-fr-components-0.1.0-hybrid.json` exists and contains `components[]`.
-- `build/pyinstaller-dist/DYS-fr-core-runtime-0.1.0-hybrid.zip` exists and does not contain JRE, LanguageTool, spaCy model, or Mistral.
-- `build/pyinstaller-dist/DYS-fr-jre-0.1.0.zip` exists.
-- `build/pyinstaller-dist/DYS-fr-languagetool-0.1.0.zip` exists.
-- `build/pyinstaller-dist/DYS-fr-spacy-fr_core_news_md-0.1.0.zip` exists.
-- The Mistral component in the JSON points to Hugging Face and records the local GGUF size and SHA-256.
+- `build/staging/hybrid/resources/models` does **not** exist (the build fails if it does).
+- `build/pyinstaller-runtime/DYS-fr-runtime/DYS-fr-runtime.exe` exists.
+- `build/installer/DYS-fr-Setup-<version>.exe` exists; note its size and SHA-256 (the build prints both).
+- `build/installer/DYS-fr-Setup-<version>-files.txt` contains no `.gguf` entry.
 
-## GitHub Release
+## Smoke validation
 
-- Create or update the public GitHub Release matching `v<AppVersion>`.
-- Upload the component manifest JSON.
-- Upload the core, JRE, LanguageTool, and spaCy ZIPs.
-- Confirm each GitHub URL in the manifest is public and downloadable without authentication.
-- Confirm the Mistral URL points to the Hugging Face GGUF.
+On a clean VM with a snapshot to roll back to. Windows Sandbox is not available on
+Windows 11 Home, so use a real VM.
 
-## Smoke Validation
-
-Run after publishing release assets:
+Install with all defaults, then:
 
 ```powershell
-.\.venv\Scripts\python.exe .\packaging\windows\smoke_test.py --exe .\build\pyinstaller-dist\DYS-fr.exe --timeout 900
+.\.venv\Scripts\python.exe .\packaging\windows\smoke_test.py
 ```
 
-For local pre-release testing, keep the generated JSON and ZIPs next to `DYS-fr.exe`; the launcher will use adjacent files before downloading. Mistral will still download from the URL in the manifest unless the GGUF file is also next to `DYS-fr.exe`.
+The smoke test discovers the real ports from `%LOCALAPPDATA%\DYS-fr\run\instance.json`,
+asserts the UI answers within 20 s and LanguageTool within 90 s, checks the installed
+file layout, and fails if anything under the install directory changed while the app ran.
 
-Confirm:
+Confirm by hand what the smoke test cannot:
 
-- First launch installs `DYS-fr-runtime.exe`, `_internal/`, and `DYS-fr-runtime-manifest.json`.
-- First launch downloads all missing required components, including Mistral.
-- Second launch starts without redownloading when local files are valid.
-- Deleting a critical file causes only the missing component to be repaired.
-- First launch without internet shows a clear error.
-- Launch after valid installation works without internet.
-- Running from a non-writable folder shows a clear error asking the user to move the executable.
-- Streamlit responds with HTTP 200.
-- LanguageTool responds at `/v2/languages`.
-- The IA mode is available and detects Mistral.
+- The wizard runs to completion with a single UAC prompt.
+- **Task Manager shows `DYS-fr-runtime.exe` running as the user, not elevated.** This is
+  the `runasoriginaluser` flag; if it regresses, first-launch state goes to the
+  administrator's profile and the app silently splits in two.
+- A Start Menu entry and an uninstaller entry in Apps & Features exist.
+- No console window flashes when LanguageTool starts.
+- Launching as a **standard user** works, and state appears under that user's `%LOCALAPPDATA%`.
+- **With the VM network disabled**, light mode corrects text end to end. This is the
+  entire point of shipping a 1.2 GB installer; test it every release.
+- Occupying port 8501 before launch produces a working app on another port, a warning in
+  the sidebar, and the real URL in `instance.json`.
+- Re-running the installer while the app is open prompts to close it.
+- `%LOCALAPPDATA%\DYS-fr\logs\dys-fr.log` records the startup sequence.
 
-## Release Notes
+## Model download
 
-- Record the app version used in `build.ps1`.
-- Record the payload flavor: `hybrid` for the client release.
-- Record LanguageTool and spaCy versions from `packaging/windows/assets.manifest.json`.
-- Record the detected JRE version from `build/staging/hybrid/staging-manifest.json`.
-- Record final launcher size, component sizes, and SHA-256 values.
+- The sidebar offers the model download only when no model is resolvable.
+- Progress advances and the interface stays usable in light mode during the download.
+- Cancelling keeps the `.part` file; restarting resumes rather than starting over.
+- On completion, hybrid mode becomes selectable **without restarting the application**.
+
+## Uninstall
+
+- `DYS-fr-Setup-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` exits 0.
+- Uninstalling prompts about personal data and **defaults to keeping it**.
+- `unins000.exe /VERYSILENT /KEEPDATA` removes the program; `models\` and `config.yaml` survive.
+- `unins000.exe /VERYSILENT /PURGEDATA` removes `%LOCALAPPDATA%\DYS-fr` entirely.
+
+## Release notes
+
+- App version used in `build.ps1`.
+- LanguageTool and spaCy versions from `packaging/windows/assets.manifest.json`.
+- Detected JRE version from `build/staging/hybrid/staging-manifest.json`.
+- Installer size and SHA-256.
+- **Whether the build was signed.** An unsigned release needs SmartScreen guidance for
+  the client, sent before delivery rather than during it.

@@ -129,7 +129,7 @@ The strongest section: these hold.
 |---|---|---|---|---|
 | F1 | Everything works **100% offline**; zero network calls at correction time | `.tex:45,55,96`, `README.md:14` | **Implemented** | LT on `127.0.0.1:8081` (`config.yaml:12`), spaCy local, llama.cpp in-process, Ollama on localhost. Verified as a release check, `docs/windows_release_checklist.md:56` |
 | F2 | No account, no sign-up | `.tex:97` | **Implemented** | No authentication code exists |
-| F3 | No external dependency (no system Java, no Internet) beyond first-run asset download | `docs/archive/Conception French Version.md:231` | **Implemented** | Embedded JRE, see `docs/windows_distribution.md` |
+| F3 | No external dependency (no system Java, no Internet) beyond first-run asset download | `docs/archive/Conception French Version.md:231` | **Implemented** | Embedded JRE. The installer channel needs no first-run download at all; see `docs/windows_distribution.md` |
 | F4 | Downloads never live in the correction path | — | **Implemented** | No network call in `src/improvers/` or `src/guardrails/`; downloads isolated to `scripts/` and the packaging bootstrap |
 
 ---
