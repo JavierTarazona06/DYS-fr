@@ -22,7 +22,8 @@
 
 #define AppExe "DYS-fr-runtime.exe"
 ; Must match APP_MUTEX_NAME in src/runtime/launcher.py.
-#define AppMutexName "DYS-fr-{8EFBD1E9-CC98-4D95-8C98-D0C7F0A0E6E8}"
+; No braces: Inno treats { in a directive value as a constant reference.
+#define AppMutexName "DYS-fr-8EFBD1E9-CC98-4D95-8C98-D0C7F0A0E6E8"
 
 [Setup]
 AppId={{8EFBD1E9-CC98-4D95-8C98-D0C7F0A0E6E8}

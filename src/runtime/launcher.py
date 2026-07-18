@@ -33,8 +33,9 @@ LOCK_RECOVERY_TIMEOUT_S = 10.0
 # Must match AppMutex in packaging/windows/installer.iss so the installer can
 # detect a running instance and ask the user to close it before upgrading.
 # Session-local, not "Global\\": creating a global object needs a privilege a
-# standard user does not hold.
-APP_MUTEX_NAME = "DYS-fr-{8EFBD1E9-CC98-4D95-8C98-D0C7F0A0E6E8}"
+# standard user does not hold. No braces in the name: Inno Setup would read
+# them as a constant reference in the .iss.
+APP_MUTEX_NAME = "DYS-fr-8EFBD1E9-CC98-4D95-8C98-D0C7F0A0E6E8"
 
 # Module-level so the handle outlives the function and the mutex stays held
 # for the lifetime of the process.
