@@ -108,6 +108,20 @@ Type: filesandordirs; Name: "{app}\_internal"
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+{ Inno Setup has no built-in command-line lookup; ParamCount/ParamStr is the idiom. }
+function CmdLineParamExists(const Value: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), Value) = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function UserDataRoot(): String;
 begin
   Result := ExpandConstant('{localappdata}') + '\DYS-fr';
