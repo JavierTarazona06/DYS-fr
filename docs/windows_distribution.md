@@ -84,6 +84,11 @@ is found in the stage root).
 Output: `build/installer/DYS-fr-Setup-<version>.exe`, plus a
 `DYS-fr-Setup-<version>-files.txt` manifest listing everything packed.
 
+**Build time.** Maximum solid LZMA compression over ~1.1 GB is slow: a measured run
+produced a 507 MB installer from 4,880 files in **8 hours 6 minutes**. Pass
+`-FastCompression` while iterating — it switches to `lzma2/fast` without solid
+compression, at the cost of a larger installer. Use the default for releases only.
+
 ### Signing
 
 There is no code-signing certificate yet, so the installer is unsigned and SmartScreen

@@ -46,8 +46,15 @@ MinVersion=10.0.17763
 PrivilegesRequired=admin
 ; Empty: no /CURRENTUSER fallback, so the layout is always per-machine.
 PrivilegesRequiredOverridesAllowed=
+; Measured: lzma2/max + solid over ~1.1 GB took 8h06m on a developer machine for a
+; 507 MB installer. Pass /DFastCompression (build.ps1 -FastCompression) while iterating.
+#ifdef FastCompression
+Compression=lzma2/fast
+SolidCompression=no
+#else
 Compression=lzma2/max
 SolidCompression=yes
+#endif
 LZMAUseSeparateProcess=yes
 OutputDir={#OutputDir}
 OutputBaseFilename=DYS-fr-Setup-{#AppVersion}

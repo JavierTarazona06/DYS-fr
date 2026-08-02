@@ -20,7 +20,8 @@ param(
     [string]$Channel = 'installer',
     [string]$SignToolExe = "",
     [string]$SignCertThumbprint = "",
-    [string]$SignTimestampUrl = "http://timestamp.digicert.com"
+    [string]$SignTimestampUrl = "http://timestamp.digicert.com",
+    [switch]$FastCompression
 )
 
 $ErrorActionPreference = "Stop"
@@ -254,8 +255,16 @@ try {
     if ($Channel -in 'installer', 'both') {
         New-Item -ItemType Directory -Force -Path $resolvedInstallerOutputDir | Out-Null
 
-        Write-Host "Compiling Inno Setup installer (this takes a while over ~1.2 GB)..."
-        & $isccExePath `
+        $isccArgs = @()
+        if ($FastCompression) {
+            $isccArgs += "/DFastCompression"
+            Write-Host "Compiling Inno Setup installer (fast compression, larger output)..."
+        }
+        else {
+            Write-Host "Compiling Inno Setup installer. Maximum solid compression over ~1.1 GB takes HOURS; pass -FastCompression while iterating."
+        }
+
+        & $isccExePath @isccArgs `
             "/DAppVersion=$AppVersion" `
             "/DRuntimeDir=$resolvedRuntimeBundleDir" `
             "/DStageDir=$resolvedStageRoot" `

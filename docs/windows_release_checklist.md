@@ -28,6 +28,8 @@ Verify:
 - `build/staging/hybrid/resources/models` does **not** exist (the build fails if it does).
 - `build/pyinstaller-runtime/DYS-fr-runtime/DYS-fr-runtime.exe` exists.
 - `build/installer/DYS-fr-Setup-<version>.exe` exists; note its size and SHA-256 (the build prints both).
+- Budget the time: a release build with full solid compression measured **8h06m** for a
+  507 MB installer. Do not start one an hour before a delivery.
 - `build/installer/DYS-fr-Setup-<version>-files.txt` contains no `.gguf` entry.
 
 ## Smoke validation
