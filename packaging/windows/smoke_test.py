@@ -94,7 +94,30 @@ def diff_snapshots(before: dict, after: dict) -> list[str]:
     return problems
 
 
-def terminate(process: subprocess.Popen) -> None:
+def kill_stragglers_under(app_dir: Path) -> None:
+    """Kill leftovers whose executable lives inside the install directory.
+
+    Scoped on purpose. A blanket `taskkill /IM java.exe` would also kill unrelated
+    JVMs on the machine running the test -- an IDE, a build tool, a database.
+    The embedded JRE lives under {app}\_internaluntime\jrein, so matching on
+    the install path is both sufficient and safe.
+    """
+    try:
+        import psutil
+    except ImportError:
+        return
+
+    root = str(app_dir).lower()
+    for proc in psutil.process_iter(["exe"]):
+        try:
+            exe = (proc.info.get("exe") or "").lower()
+            if exe and exe.startswith(root):
+                proc.kill()
+        except Exception:
+            continue
+
+
+def terminate(process: subprocess.Popen, app_dir: Path) -> None:
     if process.poll() is None:
         if os.name == "nt":
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True, check=False)
@@ -104,9 +127,7 @@ def terminate(process: subprocess.Popen) -> None:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/F", "/T", "/IM", RUNTIME_IMAGE_NAME], capture_output=True, check=False)
-        subprocess.run(["taskkill", "/F", "/IM", "java.exe"], capture_output=True, check=False)
+    kill_stragglers_under(app_dir)
 
 
 def main() -> int:
@@ -184,7 +205,7 @@ def main() -> int:
         if not lt_ok:
             failures.append(f"LanguageTool did not answer within {args.timeout}s")
     finally:
-        terminate(process)
+        terminate(process, app_dir)
 
     if not args.skip_write_check:
         time.sleep(1.0)
