@@ -99,8 +99,8 @@ def kill_stragglers_under(app_dir: Path) -> None:
 
     Scoped on purpose. A blanket `taskkill /IM java.exe` would also kill unrelated
     JVMs on the machine running the test -- an IDE, a build tool, a database.
-    The embedded JRE lives under {app}\_internaluntime\jrein, so matching on
-    the install path is both sufficient and safe.
+    The embedded JRE lives inside the install directory, so matching on the
+    install path is both sufficient and safe.
     """
     try:
         import psutil
