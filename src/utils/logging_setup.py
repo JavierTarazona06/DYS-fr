@@ -34,30 +34,67 @@ class _StreamToLogger:
 
     Used only in frozen builds, where the real streams are unusable. Buffers
     partial writes so a single log record is emitted per line.
+
+    Accepts bytes as well as str: click writes bytes straight to the stream when it
+    cannot find a binary writer, which is how Streamlit's startup banner reaches us.
+    Every method swallows its own errors -- this object exists to record diagnostics,
+    so it must never be the thing that takes the application down.
     """
+
+    encoding = "utf-8"
+    errors = "replace"
 
     def __init__(self, logger: logging.Logger, level: int) -> None:
         self._logger = logger
         self._level = level
         self._buffer = ""
 
-    def write(self, message: str) -> int:
+    def write(self, message) -> int:
         if not message:
             return 0
-        self._buffer += message
-        while "\n" in self._buffer:
-            line, self._buffer = self._buffer.split("\n", 1)
-            if line.strip():
-                self._logger.log(self._level, line.rstrip())
+        try:
+            if isinstance(message, (bytes, bytearray, memoryview)):
+                text = bytes(message).decode(self.encoding, self.errors)
+            else:
+                text = str(message)
+
+            self._buffer += text
+            while "\n" in self._buffer:
+                line, self._buffer = self._buffer.split("\n", 1)
+                if line.strip():
+                    self._logger.log(self._level, line.rstrip())
+        except Exception:
+            return len(message)
         return len(message)
 
+    def writelines(self, lines) -> None:
+        for line in lines:
+            self.write(line)
+
     def flush(self) -> None:
-        if self._buffer.strip():
-            self._logger.log(self._level, self._buffer.rstrip())
-        self._buffer = ""
+        try:
+            if self._buffer.strip():
+                self._logger.log(self._level, self._buffer.rstrip())
+            self._buffer = ""
+        except Exception:
+            self._buffer = ""
 
     def isatty(self) -> bool:
         return False
+
+    def writable(self) -> bool:
+        return True
+
+    def readable(self) -> bool:
+        return False
+
+    def seekable(self) -> bool:
+        return False
+
+    def fileno(self) -> int:
+        # click and others probe this; raising OSError is the documented signal that
+        # the stream has no underlying descriptor.
+        raise OSError("DYS-fr log stream has no file descriptor")
 
 
 def get_log_path() -> Path | None:
