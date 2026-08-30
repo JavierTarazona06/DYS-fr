@@ -163,6 +163,8 @@ begin
   DelTree(Root + '\run', True, True, True);
   DelTree(Root + '\spacy-cache', True, True, True);
   DelTree(Root + '\logs', True, True, True);
+  { Legacy cache directory written by pre-0.1.0 builds; no current code uses it. }
+  DelTree(Root + '\spacy_models', True, True, True);
   { Fallback location used when %LOCALAPPDATA% is not writable (src/utils/paths.py). }
   DelTree(ExpandConstant('{tmp}') + '\..\dys-fr\run', True, True, True);
 
