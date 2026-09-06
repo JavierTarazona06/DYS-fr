@@ -84,10 +84,15 @@ is found in the stage root).
 Output: `build/installer/DYS-fr-Setup-<version>.exe`, plus a
 `DYS-fr-Setup-<version>-files.txt` manifest listing everything packed.
 
-**Build time.** Maximum solid LZMA compression over ~1.1 GB is slow: a measured run
-produced a 507 MB installer from 4,880 files in **8 hours 6 minutes**. Pass
-`-FastCompression` while iterating — it switches to `lzma2/fast` without solid
-compression, at the cost of a larger installer. Use the default for releases only.
+**Build time.** Both settings were measured on the same 4,880-file payload:
+
+| Setting | Time | Installer size |
+|---|---|---|
+| Default (`lzma2/max`, solid) | **8 h 06 min** | 507 MB |
+| `-FastCompression` (`lzma2/fast`, non-solid) | **88 seconds** | 572 MB |
+
+That is 332x faster for 13% more download. Use `-FastCompression` for anything but a
+final release build, and consider whether 65 MB is worth eight hours even then.
 
 ### Signing
 
