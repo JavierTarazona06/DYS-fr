@@ -6,9 +6,9 @@ does not break a machine that only wants the fast unit tests.
     python scripts/start_lt_server.py      # in another terminal
     pytest tests/test_qa_acceptance.py -v
 
-The H3 test is an expected failure today, and deliberately so: the run that established
-this baseline found two genuine defects, recorded as TODO-9 and TODO-10. When phase 2 fixes
-them the test will XPASS strictly and demand to be turned into a plain assertion.
+The baseline run of 2026-09-08 found two genuine defects here, TODO-9 and TODO-10, and both
+were fixed in src/improvers/lt_improver.py. H3 has held at zero since; if it moves, a
+replacement guard has regressed.
 """
 
 from __future__ import annotations
@@ -62,24 +62,12 @@ def test_h5_mean_sentence_length_stays_within_bound(report):
     assert achieved <= bound, f"mean sentence length {achieved:.1f} exceeds {bound:.0f} words"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "TODO-9: LanguageTool substitutes a proper noun for a garbled word. "
-        "TODO-10: LanguageTool collapses a deliberate '..' blank. "
-        "Both are fixed in phase 2; remove this marker then."
-    ),
-)
 def test_h3_no_illegal_additions(report):
     """The product's central promise: never add information that was not in the input."""
     total = report.aggregate["illegal_additions_total"]
     assert total == 0, f"{total} illegal additions: {report.aggregate['violations']}"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Same two defects as H3, seen through the adversarial texts. Fixed in phase 2.",
-)
 def test_adversarial_texts_hold(report):
     violations = report.aggregate["violations"]
     assert not violations, "\n".join(violations)

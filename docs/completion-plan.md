@@ -95,27 +95,37 @@ the agreed threshold. That first run is the baseline everything else is measured
 `tests/test_qa_acceptance.py` is the gate. Run it with
 `python -m src.qa.runner --json build/qa/report.json` (needs LanguageTool running).
 
-### Baseline, 2026-09-08
+### Measurements
 
-| Metric | Result | Target |
-|---|---|---|
-| H3 illegal additions | **1** | 0 |
-| H4 error reduction | **92.5%** (93 → 7) | ≥80% |
-| H5 mean sentence words | 7.5 | ≤35 |
-| H6 syllables/sentence | 11.1 → 11.2 | must improve |
+| Metric | Baseline | After TODO-9 / TODO-10 | Target |
+|---|---|---|---|
+| H3 illegal additions | 1 | **0** | 0 |
+| H4 error reduction | 92.5% (93 → 7) | **86.0%** (93 → 13) | ≥80% |
+| H5 mean sentence words | 7.5 | 7.5 | ≤35 |
+| H6 syllables/sentence | 11.1 → 11.2 | 11.1 → 11.2 | must improve |
 
-H4 and H5 already pass. H6 does not improve, which is expected and not a defect: light
+H3, H4 and H5 pass. H6 does not improve, which is expected rather than a defect: light
 mode fixes spelling and never shortens a sentence, so readability cannot move until the
 bounded sentence splitting from decision I-3 lands in phase 3.
 
-**H3 fails, and the run found two genuine defects — both in light mode, with no LLM
-involved.** They are recorded as TODO-9 and TODO-10 and are the first work of phase 2:
-LanguageTool replaced the garbled "duoze" with the commune name **"Eauze"**, inventing a
-proper noun; and its `DOUBLE_PUNCTUATION` rule collapsed a deliberate "`..`" blank,
-breaking client acceptance criterion B1 verbatim.
+**The H4 drop is the price of H3, and it is the right trade.** Blocking the two defective
+rules costs 6.5 points of error reduction, because some genuine double-punctuation and
+spelling fixes are now refused along with the harmful ones. H3 is an absolute requirement
+at 0%; H4 is a floor at 80% and sits comfortably above it. Recovering those points is a
+matter of making the guards more precise, not of loosening them.
 
-The two acceptance tests covering these are marked `xfail(strict=True)`, so they will fail
-loudly the moment phase 2 fixes them and demand to be turned into plain assertions.
+### What the baseline run found
+
+Two genuine defects, **both in light mode with no LLM involved**, recorded as TODO-9 and
+TODO-10 and fixed the same day:
+
+- LanguageTool replaced the garbled "duoze" with the commune name **"Eauze"**, inventing a
+  proper noun. Guarded by `_does_not_introduce_proper_noun`.
+- Its `DOUBLE_PUNCTUATION` rule collapsed a deliberate "`..`" blank, breaking client
+  acceptance criterion B1 verbatim. Guarded by `_BLOCK_RULES`.
+
+Both were found by the corpus rather than by review, which is the argument for having built
+the measurement first.
 
 ## Phase 2 — Safety layer (A2-A9, A11, C7, C8)
 
@@ -124,9 +134,9 @@ belong here rather than at the end: they are defects *of this layer*. TODO-1 mea
 mode can today return text worse than the input without telling anyone, and TODO-9 and
 TODO-10 are live no-additions violations in light mode.
 
-**Start with TODO-9 and TODO-10.** They are the only two things standing between the
-current build and a passing H3, they are both reachable without an LLM, and TODO-10 breaks
-a client acceptance criterion word for word.
+**TODO-9 and TODO-10 are done** (2026-09-08): H3 now holds at 0 and every adversarial check
+passes. What remains in this phase is the guardrail layer proper — the `policy.py` stubs,
+the two empty modules, and TODO-1 to TODO-3.
 
 - Implement `src/guardrails/policy.py` for real: `validate_no_new_entities`,
   `validate_no_new_numbers_dates`, `validate_no_new_propn`, `validate_novelty_ratio`, and

@@ -1,11 +1,12 @@
 # TODO
 
-Open work found while building [business-rules.md](business-rules.md). Nothing here has
-been fixed — this is a queue, not a changelog.
+Open work found while building [business-rules.md](business-rules.md). A queue, not a
+changelog: entries move to **Fixed** at the bottom when they are closed, with a one-line
+note of how.
 
 [completion-plan.md](completion-plan.md) schedules this queue: the decisions below were
-Phase 0; TODO-1, TODO-2, TODO-3, TODO-9 and TODO-10 are Phase 2; TODO-4 to TODO-8 are
-Phase 4.
+Phase 0; TODO-1, TODO-2 and TODO-3 are Phase 2; TODO-4 to TODO-8 are Phase 4.
+TODO-9 and TODO-10 were fixed on 2026-09-08.
 
 Two populations only:
 
@@ -61,8 +62,12 @@ the result, and `validate_no_new_entities` is a `pass` stub. Two of the four com
 guardrails the comment claims do not exist.
 
 The disabling itself may well be correct — the comment notes the whitelist blocked
-legitimate corrections like "sui"→"suis". The defect is the justification, which will
-survive the next code review as if it were protection.
+legitimate corrections like "sui"→"suis".
+
+**Partly resolved 2026-09-08**: the false justification is gone. The comment now lists
+the guards that actually run and states plainly that entity masking does not validate
+the result and that `_safe_by_category` is inert. What remains open is the decision
+itself — keep the whitelist disabled, or repair and re-enable it.
 
 Affects rule A11.
 
@@ -135,38 +140,6 @@ Affects rules G3, G8, G9.
 The inline comment says `# Limit to top 5 errors`; the expression is
 `max(5, len(matches) * 0.1)`, which exceeds 5 on any text with more than 50 matches.
 Affects rule D4. Contributing cause of TODO-1.
-### TODO-9 · LanguageTool substitutes a proper noun for a garbled word — **High**
-
-Found by the first QA corpus run (`src/qa/`), text `t17`.
-
-The corpus injected a letter inversion turning "douze" into "duoze". LanguageTool's spell
-checker replaced it with **"Eauze"** — a real French commune. The engine invented a place
-name where the user had written a misspelt number word.
-
-`_does_not_add_digits` (`src/improvers/lt_improver.py:73`) guards against introducing
-digits. There is no equivalent guard for proper nouns, even though A4 requires one and
-`validate_no_new_propn` is a `pass` stub.
-
-This is the exact failure mode the no-additions policy exists to prevent, and it happens in
-**light mode**, without any LLM involved.
-
-Affects rules A2, A4, H3, H9.
-
-### TODO-10 · A deliberate "`..`" blank is filled in — **High**
-
-Found by the first QA corpus run, text `t29`, which encodes client acceptance criterion B1
-from the `.tex` deliverable verbatim.
-
-LanguageTool's `DOUBLE_PUNCTUATION` rule replaces "`..`" with "`.`", destroying a blank the
-user left on purpose. The client acceptance test is "l'année de l'indépendance des
-États-Unis est le .. de .." must come back **still incomplete**; today it does not.
-
-The fix belongs in the category filter (TODO-3): `DOUBLE_PUNCTUATION` is precisely the kind
-of rule `_BLOCK_CATEGORIES` was meant to hold, and that set is empty.
-
-Affects rules B1, H15, and client acceptance.
-
-
 ---
 
 ## Decisions taken
@@ -204,3 +177,45 @@ names Hunspell as part of the engine. The repository is public.
 This is not a code defect and not a documentation contradiction — it is a claim about a
 shipped product. It needs a decision that is not on either list above: correct the README,
 or build the features.
+
+---
+
+## Fixed
+
+### TODO-9 · LanguageTool substitutes a proper noun for a garbled word — **High**
+
+Found by the first QA corpus run (`src/qa/`), text `t17`.
+
+The corpus injected a letter inversion turning "douze" into "duoze". LanguageTool's spell
+checker replaced it with **"Eauze"** — a real French commune. The engine invented a place
+name where the user had written a misspelt number word.
+
+`_does_not_add_digits` (`src/improvers/lt_improver.py:73`) guards against introducing
+digits. There is no equivalent guard for proper nouns, even though A4 requires one and
+`validate_no_new_propn` is a `pass` stub.
+
+This is the exact failure mode the no-additions policy exists to prevent, and it happens in
+**light mode**, without any LLM involved.
+
+**Fixed 2026-09-08** by `_does_not_introduce_proper_noun` in `src/improvers/lt_improver.py`:
+a replacement may not introduce a capitalised segment absent from the original, while
+capitalising a word the user already wrote stays allowed. The guard splits on apostrophes
+and hyphens, because LanguageTool's actual suggestion was the elided `d'Eauze`, whose
+leading letter is lowercase.
+
+Affects rules A2, A4, H3, H9.
+
+### TODO-10 · A deliberate "`..`" blank is filled in — **High**
+
+Found by the first QA corpus run, text `t29`, which encodes client acceptance criterion B1
+from the `.tex` deliverable verbatim.
+
+LanguageTool's `DOUBLE_PUNCTUATION` rule replaces "`..`" with "`.`", destroying a blank the
+user left on purpose. The client acceptance test is "l'année de l'indépendance des
+États-Unis est le .. de .." must come back **still incomplete**; today it does not.
+
+**Fixed 2026-09-08** by `_BLOCK_RULES` in `src/improvers/lt_improver.py`. Blocked by rule
+id rather than by category: PUNCTUATION as a whole carries useful fixes and only this rule
+is harmful.
+
+Affects rules B1, H15, and client acceptance.

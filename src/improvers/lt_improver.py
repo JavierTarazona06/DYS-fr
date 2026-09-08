@@ -1,5 +1,6 @@
 import os
 import re
+import unicodedata
 from typing import Iterable
 from spacy.language import Language
 
@@ -9,6 +10,16 @@ from .lt_client import LTClient
 
 _SAFE_CATEGORIES: set[str] = set() # Errors to always fix
 _BLOCK_CATEGORIES = set() # Keep this as an empty set for now;  Errors not to fix
+
+# Rules whose "correction" destroys information the user put there deliberately.
+# Blocked by rule id rather than by category: PUNCTUATION as a whole carries useful
+# fixes, and only these specific rules are harmful.
+_BLOCK_RULES = {
+    # Collapses ".." or "..." into ".". Client acceptance criterion B1 requires a
+    # deliberately incomplete prompt to come back still incomplete, and this rule
+    # silently completes it. See TODO-10.
+    "DOUBLE_PUNCTUATION",
+}
 _DEBUG_FILTER = os.getenv("LT_DEBUG_FILTER", "1").lower() in {"1", "true", "yes", "on"} # Debug flag
 
 # Tokens that are always considered safe and won't be changed
@@ -77,6 +88,40 @@ def _does_not_add_digits(orig: str, repl: str) -> bool:
 def _token_delta_ok(orig: str, repl: str, max_delta: int = 1) -> bool: # Default value here is fine
     """Check if the token count difference between original and replacement is within max_delta."""
     return (len(repl.split()) - len(orig.split())) <= max_delta
+
+
+def _safe_by_rule(match) -> bool:
+    """Reject matches from rules that are never safe for this product."""
+    return getattr(match, "ruleId", None) not in _BLOCK_RULES
+
+
+def _normalise_for_comparison(text: str) -> str:
+    """Lowercase, strip accents, drop punctuation. Elisions collapse: "j'ai" -> "jai"."""
+    decomposed = unicodedata.normalize("NFD", text.lower())
+    stripped = "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
+    return "".join(ch for ch in stripped if ch.isalnum())
+
+
+def _does_not_introduce_proper_noun(orig: str, repl: str) -> bool:
+    """Block a replacement that introduces a capitalised word absent from the original.
+
+    LanguageTool's spell checker offers proper nouns for garbled words: the QA corpus
+    caught it turning "duoze" into "Eauze", a French commune, which is exactly the
+    invention the no-additions policy exists to stop. Capitalising a word the user
+    already wrote ("paris" -> "Paris", "de" -> "De") is a correction and stays allowed;
+    substituting a different capitalised word does not. See TODO-9.
+    """
+    original_normalised = _normalise_for_comparison(orig)
+
+    # Split on apostrophes and hyphens rather than scanning whole tokens: LanguageTool
+    # offers elided forms, and the observed defect was "duoze" -> "d'Eauze", whose leading
+    # "d" is lowercase. Checking only a token's first letter misses the invented name.
+    for segment in re.split(r"[^\w]+", repl, flags=re.UNICODE):
+        if len(segment) < 2 or not segment[:1].isupper():
+            continue
+        if _normalise_for_comparison(segment) not in original_normalised:
+            return False
+    return True
 
 
 def _is_whitelist_change(orig: str, repl: str) -> bool:
@@ -169,17 +214,29 @@ class LTImprover(TextImprover):
                     _debug("blocked_category", m, repl=repl)
                     continue
 
+                if not _safe_by_rule(m):
+                    _debug("blocked_rule", m, repl=repl)
+                    continue
+
                 orig = current[m.offset : m.offset + m.errorLength]
 
-                # Whitelist check disabled - we rely on other guardrails:
-                # - No new digits/dates (_does_not_add_digits)
-                # - No new entities (checked via spaCy NER)
-                # - Token delta limit (_token_delta_ok)
-                # - No PROPN changes (entity masking)
-                # This allows legitimate corrections like "sui"→"suis", "chat"→"chats"
+                # The whitelist check (_is_whitelist_change) is deliberately not called: it
+                # blocked legitimate corrections like "sui"->"suis" and "chat"->"chats".
+                # The guards that actually run on every replacement are, in order:
+                #   _safe_by_rule                  blocked rule ids (TODO-10)
+                #   _does_not_add_digits           no digit introduced
+                #   _does_not_introduce_proper_noun  no invented capitalised word (TODO-9)
+                #   _token_delta_ok                at most one extra token
+                # Note what is *not* here: entity masking happens before correction and does
+                # not validate the result, and _safe_by_category is inert while both
+                # category sets are empty (TODO-3).
 
                 if not _does_not_add_digits(orig, repl):
                     _debug("adds_digits", m, orig=orig, repl=repl)
+                    continue
+
+                if not _does_not_introduce_proper_noun(orig, repl):
+                    _debug("introduces_proper_noun", m, orig=orig, repl=repl)
                     continue
                 
                 # CORRECTED LINE 132 (adjust line number if other changes were made)
