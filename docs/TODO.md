@@ -3,8 +3,9 @@
 Open work found while building [business-rules.md](business-rules.md). Nothing here has
 been fixed — this is a queue, not a changelog.
 
-[completion-plan.md](completion-plan.md) schedules this queue: the decisions below are
-Phase 0, TODO-1 to TODO-3 are Phase 2, and TODO-4 to TODO-8 are Phase 4.
+[completion-plan.md](completion-plan.md) schedules this queue: the decisions below were
+Phase 0; TODO-1, TODO-2, TODO-3, TODO-9 and TODO-10 are Phase 2; TODO-4 to TODO-8 are
+Phase 4.
 
 Two populations only:
 
@@ -134,29 +135,59 @@ Affects rules G3, G8, G9.
 The inline comment says `# Limit to top 5 errors`; the expression is
 `max(5, len(matches) * 0.1)`, which exceeds 5 on any text with more than 50 matches.
 Affects rule D4. Contributing cause of TODO-1.
+### TODO-9 · LanguageTool substitutes a proper noun for a garbled word — **High**
+
+Found by the first QA corpus run (`src/qa/`), text `t17`.
+
+The corpus injected a letter inversion turning "douze" into "duoze". LanguageTool's spell
+checker replaced it with **"Eauze"** — a real French commune. The engine invented a place
+name where the user had written a misspelt number word.
+
+`_does_not_add_digits` (`src/improvers/lt_improver.py:73`) guards against introducing
+digits. There is no equivalent guard for proper nouns, even though A4 requires one and
+`validate_no_new_propn` is a `pass` stub.
+
+This is the exact failure mode the no-additions policy exists to prevent, and it happens in
+**light mode**, without any LLM involved.
+
+Affects rules A2, A4, H3, H9.
+
+### TODO-10 · A deliberate "`..`" blank is filled in — **High**
+
+Found by the first QA corpus run, text `t29`, which encodes client acceptance criterion B1
+from the `.tex` deliverable verbatim.
+
+LanguageTool's `DOUBLE_PUNCTUATION` rule replaces "`..`" with "`.`", destroying a blank the
+user left on purpose. The client acceptance test is "l'année de l'indépendance des
+États-Unis est le .. de .." must come back **still incomplete**; today it does not.
+
+The fix belongs in the category filter (TODO-3): `DOUBLE_PUNCTUATION` is precisely the kind
+of rule `_BLOCK_CATEGORIES` was meant to hold, and that set is empty.
+
+Affects rules B1, H15, and client acceptance.
+
 
 ---
 
-## Decisions needed
+## Decisions taken
 
-Each is a contradiction between archived documents. None can be resolved by reading the
-code, because in most cases the code implements neither option.
+Each was a contradiction between archived documents. All ten were approved on 2026-09-08;
+the recommendations and their reasoning are in
+[completion-plan.md](completion-plan.md#decisions-awaiting-approval). Recorded here so the
+implementation phases have the numbers to hand.
 
-| # | Decision | Options on the table |
-|---|---|---|
-| I-1 | Novelty ratio threshold | 10–15%, 10–12%, or block above 15% — three documents, three numbers |
-| I-2 | **Is reordering allowed?** | Design docs and `README.md` say yes; the shipped prompt says no. The prompt currently wins |
-| I-3 | **Is sentence splitting allowed?** | Same split. The shipped prompt dropped the instruction entirely |
-| I-4 | **Is Hunspell part of this product?** | `README.md` advertises it; the design recommended dropping it; no code or dependency exists |
-| I-6 | Degradation fallback target | LT output (spec) or masked input (code). See TODO-6 |
-| I-7 | `max_tokens` | 512 or 526 |
-| I-9 | Stated RAM requirement | ≤4 GB, 5.5–6 GB, or ≥6 GB — the same document says two of the three |
-| I-10 | QA corpus size | 20–30 sentences or 25–40 texts |
-| I-11 | `n_ctx` | 4096 (current) or 1024–2048 (the project's own recommendation) |
-| I-12 | GGUF source and filename casing | `TheBloke` or `bartowski`; two spellings of the filename. The build uses bartowski |
-
-I-2, I-3 and I-4 are the ones that matter: they are public claims in `README.md` about
-what the product does, and the product does not do them.
+| # | Decision | Resolved as | Lands in |
+|---|---|---|---|
+| I-1 | Novelty ratio threshold | **12%**, configurable | Phase 2 |
+| I-2 | Is reordering allowed? | **No** | Phase 2 |
+| I-3 | Is sentence splitting allowed? | **Yes, bounded**: LT-proposed or over threshold, at most 2 parts, no invented connectors | Phase 3 |
+| I-4 | Is Hunspell part of this product? | **No** — removed from `README.md` | Done |
+| I-6 | Degradation fallback target | **LanguageTool output** | Phase 4 (TODO-6) |
+| I-7 | `max_tokens` | **512** | Phase 4 |
+| I-9 | Stated RAM requirement | **4 GB light, 8 GB recommended for hybrid** | Phase 4 |
+| I-10 | QA corpus size | **30 texts** | Done (`src/qa/corpus.py`) |
+| I-11 | `n_ctx` | **2048**, measured before and after | Phase 4 (TODO-7) |
+| I-12 | GGUF source and filename casing | **bartowski, pinned to an immutable revision** | Phase 4 |
 
 I-5, I-8, I-13, I-14 and I-15 are not listed here — they are stale statements in archived
 documents rather than open questions, and they are recorded in

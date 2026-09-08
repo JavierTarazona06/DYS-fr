@@ -38,6 +38,11 @@ def include_spacy_submodule(name: str) -> bool:
 
 
 def include_src_submodule(name: str) -> bool:
+    # src.qa is the development QA harness (corpus, metrics, runner). It is never used at
+    # runtime and pulls the corpus text into the bundle for no reason.
+    if name == "src.qa" or name.startswith("src.qa."):
+        return False
+
     if not INCLUDE_HYBRID and name in {
         "src.improvers.llm_improver",
         "src.improvers.ollama_improver",
@@ -75,7 +80,7 @@ hiddenimports += [
     "watchdog.observers.winapi",
 ]
 
-excludes = ["tests", "pytest", "tkinter"]
+excludes = ["tests", "pytest", "tkinter", "src.qa"]
 if not INCLUDE_HYBRID:
     excludes += [
         "llama_cpp",

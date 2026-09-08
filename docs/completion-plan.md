@@ -71,6 +71,9 @@ same filter chain and the code cannot be written without them.
 
 **Done when** the decisions are approved and the README makes no unmarked false claim.
 
+**Status: done.** Decisions approved 2026-09-08; README marked; the EV/SmartScreen paragraph
+corrected; section E line citations re-verified.
+
 ## Phase 1 — Measurement (H1-H6)
 
 First, and this is deliberate: it is the only thing that makes the rest verifiable. H4 asks
@@ -88,11 +91,42 @@ in phase 2 would be built blind and nobody could say whether they work.
 **Done when** pytest produces the four metrics and fails if H3 is not 0% or H4 falls below
 the agreed threshold. That first run is the baseline everything else is measured against.
 
+**Status: done.** `src/qa/` holds the taxonomy, corpus, metrics and runner;
+`tests/test_qa_acceptance.py` is the gate. Run it with
+`python -m src.qa.runner --json build/qa/report.json` (needs LanguageTool running).
+
+### Baseline, 2026-09-08
+
+| Metric | Result | Target |
+|---|---|---|
+| H3 illegal additions | **1** | 0 |
+| H4 error reduction | **92.5%** (93 → 7) | ≥80% |
+| H5 mean sentence words | 7.5 | ≤35 |
+| H6 syllables/sentence | 11.1 → 11.2 | must improve |
+
+H4 and H5 already pass. H6 does not improve, which is expected and not a defect: light
+mode fixes spelling and never shortens a sentence, so readability cannot move until the
+bounded sentence splitting from decision I-3 lands in phase 3.
+
+**H3 fails, and the run found two genuine defects — both in light mode, with no LLM
+involved.** They are recorded as TODO-9 and TODO-10 and are the first work of phase 2:
+LanguageTool replaced the garbled "duoze" with the commune name **"Eauze"**, inventing a
+proper noun; and its `DOUBLE_PUNCTUATION` rule collapsed a deliberate "`..`" blank,
+breaking client acceptance criterion B1 verbatim.
+
+The two acceptance tests covering these are marked `xfail(strict=True)`, so they will fail
+loudly the moment phase 2 fixes them and demand to be turned into plain assertions.
+
 ## Phase 2 — Safety layer (A2-A9, A11, C7, C8)
 
-TODO-1, TODO-2 and TODO-3 belong here rather than at the end: they are defects *of this
-layer*. TODO-1 in particular means hybrid mode can today return text worse than the input
-without telling anyone.
+TODO-1, TODO-2, TODO-3 and the two defects the baseline run surfaced (TODO-9, TODO-10)
+belong here rather than at the end: they are defects *of this layer*. TODO-1 means hybrid
+mode can today return text worse than the input without telling anyone, and TODO-9 and
+TODO-10 are live no-additions violations in light mode.
+
+**Start with TODO-9 and TODO-10.** They are the only two things standing between the
+current build and a passing H3, they are both reachable without an LLM, and TODO-10 breaks
+a client acceptance criterion word for word.
 
 - Implement `src/guardrails/policy.py` for real: `validate_no_new_entities`,
   `validate_no_new_numbers_dates`, `validate_no_new_propn`, `validate_novelty_ratio`, and
@@ -150,11 +184,11 @@ immutability check, and the in-development markers come out of the README.
 
 ---
 
-## Decisions awaiting approval
+## Decisions taken
 
-Ten contradictions between the archived documents. None can be resolved by reading the code,
-because in most cases the code implements neither option. A recommendation is given for
-each; approve or correct.
+Ten contradictions between the archived documents, all **approved on 2026-09-08**. None could
+be resolved by reading the code, because in most cases the code implements neither option.
+The reasoning is kept because the implementation phases depend on it.
 
 | # | Question | Recommendation | Why |
 |---|---|---|---|
