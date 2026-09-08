@@ -23,8 +23,8 @@ Nothing here has been fixed. This is an inventory, not a change. Open work is in
 | **Not implemented** | No code corresponds to the rule |
 | **N/A** | Not a software rule (project management, human study) |
 
-Source paths are relative to the repository root. Line numbers were verified against the
-working tree at commit `b527d98`.
+Source paths are relative to the repository root. Line numbers were re-verified against the
+working tree at commit `f60ceb9`; they drift as files grow, so re-check before quoting.
 
 ---
 
@@ -104,12 +104,12 @@ The reason the product exists. This is the weakest section in the inventory.
 
 | # | Rule | Source | Status | Where |
 |---|---|---|---|---|
-| E1 | Dyslexia-friendly fonts: Lexend, Atkinson Hyperlegible, OpenDyslexic | `README.md:8` | Not implemented | No occurrence of any of the three names anywhere in the repository. `src/ui/layout.py:69` hardcodes `font-family: sans-serif` |
+| E1 | Dyslexia-friendly fonts: Lexend, Atkinson Hyperlegible, OpenDyslexic | `README.md:8` | Not implemented | No occurrence of any of the three names anywhere in the repository. `src/ui/layout.py:74` hardcodes `font-family: sans-serif` |
 | E2 | Adjustable font size | `README.md:8`, `.tex:59` | Not implemented | No slider widget exists in the repository |
-| E3 | Adjustable line spacing | `README.md:8`, `.tex:59` | Not implemented | Line height is hardcoded to `1.8`, and only inside the diff block, `src/ui/layout.py:69` |
-| E4 | High-contrast mode | `README.md:8`, `.tex:59` | Not implemented | No `.streamlit/config.toml`, no theme toggle. Diff colours are hardcoded light-mode pastels, `src/ui/layout.py:70-85` |
+| E3 | Adjustable line spacing | `README.md:8`, `.tex:59` | Not implemented | Line height is hardcoded to `1.8`, and only inside the diff block, `src/ui/layout.py:74` |
+| E4 | High-contrast mode | `README.md:8`, `.tex:59` | Not implemented | No `.streamlit/config.toml`, no theme toggle. Diff colours are hardcoded light-mode pastels, `src/ui/layout.py:82-91` |
 | E5 | Distraction-free focus mode | `README.md:8` | Not implemented | — |
-| E6 | Diff view: additions underlined, deletions struck through | `docs/archive/Conception French Version.md:84`, `README.md:23`, `.tex:73` | Partial | Deletions are struck through (`src/ui/layout.py:86`); additions are bold on a green background, not underlined (line 80) |
+| E6 | Diff view: additions underlined, deletions struck through | `docs/archive/Conception French Version.md:84`, `README.md:23`, `.tex:73` | Partial | Deletions are struck through (`src/ui/layout.py:91`); additions are bold on a green background, not underlined (line 85) |
 | E7 | Explicit "offline / no data sent" label in the UI | `docs/archive/Conception French Version.md:116` | **Implemented** | `src/ui/content.py:25` |
 | E8 | Single-screen UI: text area, one action button, mode selector, diff and final text | `docs/archive/Conception French Version.md:107-113`, `.tex:103` | **Implemented** | `app.py:41-61`, `src/ui/layout.py:19-113` (an expander rather than tabs) |
 | E9 | Loading progress bar and quality/latency profiles (Rapide / Équilibré / Max Qualité) | `docs/archive/Conception French Version.md:112` | Not implemented | Only a spinner, `app.py:29` |

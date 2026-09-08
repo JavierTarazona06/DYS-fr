@@ -1,19 +1,24 @@
 # DYS-fr
-Offline French text improver tailored for dyslexia (DYS). Built with Streamlit, LanguageTool, Hunspell, and spaCy, it applies safe corrections (orthography, punctuation, segmentation) with strict guardrails. Features accessible UI, diff view, high-contrast mode, and packaged Windows installer.
+Offline French text improver tailored for dyslexia (DYS). Built with Streamlit, LanguageTool and spaCy, it applies safe corrections (orthography, punctuation, segmentation). Ships as a packaged Windows installer that works with no internet connection.
 
 This project delivers an offline text correction and simplification tool designed specifically for French texts and optimized for people with dyslexia (DYS).
 
+> **Status.** Items marked 🚧 are specified and planned but **not implemented yet**.
+> [docs/completion-plan.md](docs/completion-plan.md) is the plan to close them;
+> [docs/business-rules.md](docs/business-rules.md) records the implementation status of
+> every documented rule, one by one.
+
 # Key features:
 
-- Accessible UI (Streamlit): dyslexia-friendly fonts (Lexend, Atkinson Hyperlegible, OpenDyslexic), adjustable font size, line spacing, high-contrast mode, and distraction-free focus mode.
+- Accessible UI (Streamlit): 🚧 dyslexia-friendly fonts (Lexend, Atkinson Hyperlegible, OpenDyslexic), 🚧 adjustable font size, 🚧 line spacing, 🚧 high-contrast mode, and 🚧 distraction-free focus mode.
 
-- Correction engine (DYS-safe): based on LanguageTool and Hunspell, with strict filters (“guardrails”) to ensure no new information (dates, numbers, names, entities) is added. Only safe corrections are applied (orthography, accents, punctuation, light reordering, or splitting long sentences).
+- Correction engine (DYS-safe): based on LanguageTool, with filters (“guardrails”) intended to ensure no new information (dates, numbers, names, entities) is added. Entity protection is in place; 🚧 the remaining validation layer is not yet wired in. Only safe corrections are applied (orthography, accents, punctuation, 🚧 splitting long sentences). Hunspell is listed in the design documents but is not part of the current engine.
 
-- Quality assurance: includes curated test sets with real/simulated dyslexic errors, metrics on error reduction (≥80%), sentence length, readability, and validation with end users.
+- Quality assurance: 🚧 curated test sets with simulated dyslexic errors and metrics on error reduction (≥80%), sentence length and readability. Validation with end users is a separate, non-engineering task.
 
-- Packaged for Windows: fully offline with embedded Java Runtime, LanguageTool, Hunspell, and spaCy. Distributed via PyInstaller + Inno Setup installer.
+- Packaged for Windows: fully offline with embedded Java Runtime, LanguageTool and spaCy. Distributed via PyInstaller + Inno Setup installer.
 
-- Safe by design: strict “no-additions” policy (no invented connectors, entities, or paraphrases). Guardrails prevent unsafe edits.
+- Safe by design: a strict “no-additions” policy (no invented connectors, entities, or paraphrases) is the product's central commitment. 🚧 It is currently enforced only by entity masking; the full guardrail layer is the next milestone.
 
 # Intended workflow:
 

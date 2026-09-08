@@ -101,9 +101,16 @@ will warn every user. `build.ps1` prints a warning per unsigned artefact and acc
 `-SignCertThumbprint` (and optionally `-SignToolExe`, `-SignTimestampUrl`) to sign both
 the inner executable and the setup.
 
-An ordinary OV certificate does not clear SmartScreen immediately — it accrues
-reputation over weeks. Only an EV certificate is trusted on first use. Treat this as a
+Neither OV nor EV clears SmartScreen immediately. Since March 2024 Microsoft has removed
+EV's distinct SmartScreen status, so both accrue reputation the same way — through download
+volume. EV still buys stricter identity verification and kernel-mode driver signing, neither
+of which applies here, so there is no reason to pay for it on this project.
+
+Note also that since June 2023 the private key must live on FIPS 140-2 Level 2 hardware or a
+cloud HSM; downloadable `.pfx` files are no longer issued. Treat obtaining a certificate as a
 procurement lead time, not a build task.
+[completion-plan.md](completion-plan.md#appendix--code-signing-deferred) has the current
+options and costs.
 
 ## Portable channel (testing only)
 

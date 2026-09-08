@@ -3,6 +3,9 @@
 Open work found while building [business-rules.md](business-rules.md). Nothing here has
 been fixed — this is a queue, not a changelog.
 
+[completion-plan.md](completion-plan.md) schedules this queue: the decisions below are
+Phase 0, TODO-1 to TODO-3 are Phase 2, and TODO-4 to TODO-8 are Phase 4.
+
 Two populations only:
 
 1. **Code defects** — the code does something other than what it says it does. Bounded work.
