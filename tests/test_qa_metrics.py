@@ -176,9 +176,9 @@ class TestBoundedEditDistance:
         ],
     )
     def test_distance_bound(self, a, b, limit, expected):
-        from src.qa.metrics import _within_edit_distance
+        from src.utils.text import within_edit_distance
 
-        assert _within_edit_distance(a, b, limit) is expected
+        assert within_edit_distance(a, b, limit) is expected
 
 
 class TestErrorReduction:

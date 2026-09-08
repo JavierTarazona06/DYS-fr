@@ -16,6 +16,8 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
+from src.utils.text import within_edit_distance
+
 #: Standalone numbers, including French decimal commas and ordinals like "3e".
 _NUMBER_RE = re.compile(r"\b\d+(?:[.,]\d+)?(?:\s*(?:e|er|ère|ème))?\b", re.IGNORECASE)
 
@@ -153,24 +155,6 @@ def _normalise(text: str) -> str:
     return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
 
 
-def _within_edit_distance(a: str, b: str, limit: int) -> bool:
-    """Bounded Levenshtein. Returns early once the distance cannot be within `limit`."""
-    if abs(len(a) - len(b)) > limit:
-        return False
-    previous = list(range(len(b) + 1))
-    for i, ch_a in enumerate(a, start=1):
-        current = [i]
-        for j, ch_b in enumerate(b, start=1):
-            current.append(
-                previous[j - 1] if ch_a == ch_b
-                else 1 + min(previous[j], current[j - 1], previous[j - 1])
-            )
-        if min(current) > limit:
-            return False
-        previous = current
-    return previous[-1] <= limit
-
-
 def _resembles_input(entity: str, input_tokens: list[str], normalised_input: str) -> bool:
     """True when something in the input plausibly corresponds to this entity.
 
@@ -186,7 +170,7 @@ def _resembles_input(entity: str, input_tokens: list[str], normalised_input: str
     words = normalised.split()
     limit = 1 if len(normalised) <= 8 else 2
     return all(
-        any(_within_edit_distance(word, token, limit) for token in input_tokens)
+        any(within_edit_distance(word, token, limit) for token in input_tokens)
         for word in words
     )
 

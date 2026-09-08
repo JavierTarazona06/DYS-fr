@@ -1,10 +1,10 @@
 import os
 import re
-import unicodedata
 from typing import Iterable
 from spacy.language import Language
 
 from src.guardrails.entities import mask_entities, reinject_entities
+from src.utils.text import normalise_for_comparison, within_edit_distance
 from .base import TextImprover
 from .lt_client import LTClient
 
@@ -95,13 +95,6 @@ def _safe_by_rule(match) -> bool:
     return getattr(match, "ruleId", None) not in _BLOCK_RULES
 
 
-def _normalise_for_comparison(text: str) -> str:
-    """Lowercase, strip accents, drop punctuation. Elisions collapse: "j'ai" -> "jai"."""
-    decomposed = unicodedata.normalize("NFD", text.lower())
-    stripped = "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
-    return "".join(ch for ch in stripped if ch.isalnum())
-
-
 def _does_not_introduce_proper_noun(orig: str, repl: str) -> bool:
     """Block a replacement that introduces a capitalised word absent from the original.
 
@@ -111,7 +104,7 @@ def _does_not_introduce_proper_noun(orig: str, repl: str) -> bool:
     already wrote ("paris" -> "Paris", "de" -> "De") is a correction and stays allowed;
     substituting a different capitalised word does not. See TODO-9.
     """
-    original_normalised = _normalise_for_comparison(orig)
+    original_normalised = normalise_for_comparison(orig)
 
     # Split on apostrophes and hyphens rather than scanning whole tokens: LanguageTool
     # offers elided forms, and the observed defect was "duoze" -> "d'Eauze", whose leading
@@ -119,9 +112,33 @@ def _does_not_introduce_proper_noun(orig: str, repl: str) -> bool:
     for segment in re.split(r"[^\w]+", repl, flags=re.UNICODE):
         if len(segment) < 2 or not segment[:1].isupper():
             continue
-        if _normalise_for_comparison(segment) not in original_normalised:
+        if normalise_for_comparison(segment) not in original_normalised:
             return False
     return True
+
+
+def _does_not_insert_words(orig: str, repl: str) -> bool:
+    """Allow re-segmenting the user's letters; refuse inserting a word they never wrote.
+
+    Both cases grow the token count, so a delta bound alone cannot tell them apart:
+
+        "unepomme" -> "une pomme"   re-segmentation, a correction a dyslexic writer needs
+        "fiat"     -> "est fiat"    insertion, LanguageTool supplying a missing verb
+
+    Stripping whitespace and punctuation separates them: a re-segmentation leaves roughly
+    the same letters, an insertion does not. A small edit budget keeps a fix that both
+    re-segments and corrects spelling ("unepome" -> "une pomme") on the allowed side.
+
+    Rule A5 forbids adding meaning-bearing words; before this guard it was enforced only
+    by asking the LLM nicely, and not at all in light mode.
+    """
+    if len(repl.split()) <= len(orig.split()):
+        return True
+
+    original = normalise_for_comparison(orig)
+    replacement = normalise_for_comparison(repl)
+    budget = 1 if len(original) <= 8 else 2
+    return within_edit_distance(original, replacement, budget)
 
 
 def _is_whitelist_change(orig: str, repl: str) -> bool:
@@ -226,6 +243,7 @@ class LTImprover(TextImprover):
                 #   _safe_by_rule                  blocked rule ids (TODO-10)
                 #   _does_not_add_digits           no digit introduced
                 #   _does_not_introduce_proper_noun  no invented capitalised word (TODO-9)
+                #   _does_not_insert_words         no word the user never wrote (A5)
                 #   _token_delta_ok                at most one extra token
                 # Note what is *not* here: entity masking happens before correction and does
                 # not validate the result, and _safe_by_category is inert while both
@@ -237,6 +255,10 @@ class LTImprover(TextImprover):
 
                 if not _does_not_introduce_proper_noun(orig, repl):
                     _debug("introduces_proper_noun", m, orig=orig, repl=repl)
+                    continue
+
+                if not _does_not_insert_words(orig, repl):
+                    _debug("inserts_words", m, orig=orig, repl=repl)
                     continue
                 
                 # CORRECTED LINE 132 (adjust line number if other changes were made)

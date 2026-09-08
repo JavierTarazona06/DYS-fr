@@ -15,11 +15,12 @@ import pytest
 from src.improvers.lt_improver import (
     _BLOCK_RULES,
     _does_not_add_digits,
+    _does_not_insert_words,
     _does_not_introduce_proper_noun,
-    _normalise_for_comparison,
     _safe_by_rule,
     _token_delta_ok,
 )
+from src.utils.text import normalise_for_comparison
 
 
 class _Match:
@@ -101,7 +102,31 @@ class TestNormalisation:
         ],
     )
     def test_normalisation_strips_case_accents_and_punctuation(self, text, expected):
-        assert _normalise_for_comparison(text) == expected
+        assert normalise_for_comparison(text) == expected
+
+
+class TestWordInsertionGuard:
+    """A5: the engine may re-segment what the user wrote, never add a word."""
+
+    def test_blocks_the_verb_languagetool_wanted_to_insert(self):
+        # Found in corpus text t27: SUJET_AUXILIAIRE offers "est fiat" for "fiat".
+        assert _does_not_insert_words("fiat", "est fiat") is False
+
+    def test_allows_splitting_a_run_on_word(self):
+        # The error a dyslexic writer actually makes; blocking this would hurt them.
+        assert _does_not_insert_words("unepomme", "une pomme") is True
+        assert _does_not_insert_words("ilfait", "il fait") is True
+
+    def test_allows_a_split_that_also_fixes_spelling(self):
+        assert _does_not_insert_words("unepome", "une pomme") is True
+
+    def test_allows_replacements_that_do_not_grow(self):
+        assert _does_not_insert_words("supermarchet", "supermarché") is True
+        assert _does_not_insert_words("est fiat", "fait") is True
+
+    def test_blocks_an_inserted_connector(self):
+        # A6 forbids new discourse connectors; the same guard catches them.
+        assert _does_not_insert_words("il pleut", "en effet il pleut") is False
 
 
 class TestExistingGuardsStillHold:
@@ -112,5 +137,7 @@ class TestExistingGuardsStillHold:
         assert _does_not_add_digits("2 photos", "2 photo") is True
 
     def test_token_delta_is_bounded(self):
-        assert _token_delta_ok("fiat", "est fiat", 1) is True   # currently permitted
+        # Still permitted by the delta bound alone; _does_not_insert_words is what
+        # actually rejects it, which is why both guards run.
+        assert _token_delta_ok("fiat", "est fiat", 1) is True
         assert _token_delta_ok("fiat", "il est fiat", 1) is False

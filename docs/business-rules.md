@@ -37,9 +37,9 @@ The core safety promise: a correction may fix form, never add content.
 | A1 | Return a corrected version **without adding new information** | `docs/archive/Conception French Version.md:6`, `README.md:16`, `.tex:45` | Partial | Only entity masking, `src/guardrails/entities.py:75`, called from all three improvers |
 | A2 | Output entities must be a subset of input entities: `NER(out) ⊆ NER(in)` | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:31` | Not implemented | `validate_no_new_entities` is a `pass` stub, `src/guardrails/policy.py:9` |
 | A3 | Output numbers/dates must be a subset of input numbers/dates | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:31` | Partial | `_does_not_add_digits` blocks only *introducing* a digit, `src/improvers/lt_improver.py:73`; a TODO at line 72 admits digits can still be **changed**. `src/guardrails/numbers_date.py` is empty |
-| A4 | New or modified proper nouns (PROPN) must be blocked | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:32` | Not implemented | `validate_no_new_propn` is a `pass` stub, `src/guardrails/policy.py:17` |
-| A5 | No new meaning-bearing words (nouns, verbs, adjectives, adverbs) | `docs/Ideas prompt.txt:32` | Prompt-only | `src/improvers/llm_improver.py:108` |
-| A6 | New discourse connectors ("En effet", "Par conséquent") must be blocked | `docs/archive/Moteur DYS fr.md:17` | Not implemented | — |
+| A4 | New or modified proper nouns (PROPN) must be blocked | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:32` | Partial | **Enforced in the LT path** by `_does_not_introduce_proper_noun`, `src/improvers/lt_improver.py` (TODO-9). `validate_no_new_propn` is still a `pass` stub, `src/guardrails/policy.py:17`, so the LLM path is unguarded |
+| A5 | No new meaning-bearing words (nouns, verbs, adjectives, adverbs) | `docs/Ideas prompt.txt:32` | Partial | **Enforced in the LT path** by `_does_not_insert_words`, `src/improvers/lt_improver.py`, which allows re-segmenting the user's letters but refuses inserting a word. Still prompt-only in the LLM path, `src/improvers/llm_improver.py:108` |
+| A6 | New discourse connectors ("En effet", "Par conséquent") must be blocked | `docs/archive/Moteur DYS fr.md:17` | Partial | Covered incidentally in the LT path by `_does_not_insert_words`: a connector is a word insertion. No dedicated connector list, and nothing in the LLM path |
 | A7 | Block paraphrase expanding **more than 15%** of tokens | `docs/archive/Moteur DYS fr.md:18` | Not implemented | `src/guardrails/novelty.py` is empty (0 bytes) |
 | A8 | New-token ratio must stay **≤ 10–12%** ("stricter for DYS"); on failure return the normalized input | `docs/archive/Moteur DYS fr.md:33` | Not implemented | — |
 | A9 | New-token ratio must stay **≤ 10–15%** (looser variant of A8) | `docs/archive/Conception French Version.md:69` | Not implemented | `validate_novelty_ratio(threshold=0.15)` is a `pass` stub, `src/guardrails/policy.py:21` |
@@ -48,8 +48,10 @@ The core safety promise: a correction may fix form, never add content.
 | A12 | Verbs must never be swapped for synonyms; tense and lexeme preserved | `docs/Ideas prompt.txt:20` | Prompt-only | `src/improvers/llm_improver.py:99` |
 | A13 | Register (familiar/formal) preserved; no summarizing, expanding or explaining | `docs/Ideas prompt.txt:39` | Prompt-only | `src/improvers/llm_improver.py:113` |
 
-**Six of thirteen have no implementation at all.** The declared validation layer
-(`should_accept_correction`, `src/guardrails/policy.py:25`) has zero call sites repo-wide.
+**Four of thirteen have no implementation at all** (A2, A7, A8, A9), down from six: A4, A5
+and A6 gained real guards in the LanguageTool path on 2026-09-08. The declared validation
+layer (`should_accept_correction`, `src/guardrails/policy.py:25`) still has zero call sites
+repo-wide, so the LLM path remains unguarded.
 
 ---
 
@@ -208,11 +210,14 @@ Of **71 documented rules**:
 
 - **15 are implemented** — concentrated almost entirely in offline guarantees (F), the
   packaged Windows delivery, and the shape of the UI.
-- **17 are partial** — the rule is approximated, or holds in one engine path but not the other.
-- **6 are prompt-only** — stated to the model, unenforceable by construction.
+- **20 are partial** — the rule is approximated, or holds in one engine path but not the other.
+- **5 are prompt-only** — stated to the model, unenforceable by construction.
 - **1 is disabled** and **1 is dead code** — written, reviewed, and not running (A11, C8).
-- **28 have no implementation.**
+- **26 have no implementation.**
 - **3 are not software rules.**
+
+Counts as of 2026-09-08. A4, A5 and A6 moved from unimplemented to partial when the
+LanguageTool replacement guards landed; the LLM path is still unguarded for all three.
 
 The pattern worth carrying forward: **what was built is the delivery mechanism, and what
 was skipped is the safety layer and the accessibility layer** — the two things that

@@ -97,10 +97,10 @@ the agreed threshold. That first run is the baseline everything else is measured
 
 ### Measurements
 
-| Metric | Baseline | After TODO-9 / TODO-10 | Target |
+| Metric | Baseline | With the guards | Target |
 |---|---|---|---|
 | H3 illegal additions | 1 | **0** | 0 |
-| H4 error reduction | 92.5% (93 → 7) | **86.0%** (93 → 13) | ≥80% |
+| H4 error reduction | 92.5% (93 → 7) | **84.9%** (93 → 14) | ≥80% |
 | H5 mean sentence words | 7.5 | 7.5 | ≤35 |
 | H6 syllables/sentence | 11.1 → 11.2 | 11.1 → 11.2 | must improve |
 
@@ -108,11 +108,12 @@ H3, H4 and H5 pass. H6 does not improve, which is expected rather than a defect:
 mode fixes spelling and never shortens a sentence, so readability cannot move until the
 bounded sentence splitting from decision I-3 lands in phase 3.
 
-**The H4 drop is the price of H3, and it is the right trade.** Blocking the two defective
-rules costs 6.5 points of error reduction, because some genuine double-punctuation and
-spelling fixes are now refused along with the harmful ones. H3 is an absolute requirement
-at 0%; H4 is a floor at 80% and sits comfortably above it. Recovering those points is a
-matter of making the guards more precise, not of loosening them.
+**The H4 drop is the price of H3, and it is the right trade.** The three guards cost 7.6
+points of error reduction between them, because genuine double-punctuation, spelling and
+grammar fixes are refused alongside the harmful ones. H3 is an absolute requirement at 0%;
+H4 is a floor at 80% and sits comfortably above it. Recovering those points is a matter of
+making the guards more precise, not of loosening them — and the corpus now measures any
+such attempt in both directions at once.
 
 ### What the baseline run found
 
@@ -123,9 +124,15 @@ TODO-10 and fixed the same day:
   proper noun. Guarded by `_does_not_introduce_proper_noun`.
 - Its `DOUBLE_PUNCTUATION` rule collapsed a deliberate "`..`" blank, breaking client
   acceptance criterion B1 verbatim. Guarded by `_BLOCK_RULES`.
+- Its `SUJET_AUXILIAIRE` rule inserted the verb "est" into "Il fiat chaud", adding a word
+  the user never wrote. Guarded by `_does_not_insert_words`, which distinguishes
+  re-segmenting the user's letters ("unepomme" → "une pomme", a correction dyslexic
+  writers need) from inserting a new one.
 
-Both were found by the corpus rather than by review, which is the argument for having built
-the measurement first.
+All three were found by the corpus rather than by review, which is the argument for having
+built the measurement first. Between them they moved A4, A5 and A6 in the inventory from
+unimplemented to partial — enforced in the LanguageTool path, still unguarded in the LLM
+one, which is what phase 2 finishes.
 
 ## Phase 2 — Safety layer (A2-A9, A11, C7, C8)
 
