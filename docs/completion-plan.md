@@ -10,14 +10,18 @@ and the reasoning behind the sequence.
 
 ## The gap
 
-Of the 71 documented rules: 15 implemented, 17 partial, 6 prompt-only, 2 written but inert,
-**28 with no implementation at all**, 3 not software.
+At the start of this work, of the 71 documented rules: 15 implemented, 17 partial, 6
+prompt-only, 2 written but inert, **28 with no implementation at all**, 3 not software.
 
-What was skipped is not peripheral. The two missing layers are the accessibility layer —
-five features the README advertises, none of which exist — and the safety layer —
-`src/guardrails/policy.py` is five `pass` stubs, `novelty.py` and `numbers_date.py` are
-empty files, and `should_accept_correction` has zero call sites. Those two layers are
+What had been skipped was not peripheral. The two missing layers were the accessibility
+layer — five features the README advertises, none of which existed — and the safety layer:
+`src/guardrails/policy.py` was five `pass` stubs, `novelty.py` and `numbers_date.py` were
+empty files, and `should_accept_correction` had zero call sites. Those two layers are
 precisely what distinguishes DYS-fr from running text through LanguageTool directly.
+
+**As of 2026-09-09 the safety layer is built** (phase 2). The accessibility layer is not,
+and it is now the largest remaining gap. Current counts live in
+[business-rules.md](business-rules.md#j-where-the-product-actually-stands).
 
 This is a development programme measured in months, not a punch list. One useful
 consequence: under this scope the README's false claims are resolved by building, not by
