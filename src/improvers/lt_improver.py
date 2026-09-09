@@ -4,12 +4,16 @@ from typing import Iterable
 from spacy.language import Language
 
 from src.guardrails.entities import mask_entities, reinject_entities
-from src.utils.text import normalise_for_comparison, within_edit_distance
+from src.guardrails.policy import should_accept_correction
+from src.utils.text import edit_budget, normalise_for_comparison, within_edit_distance
 from .base import TextImprover
 from .lt_client import LTClient
 
-_SAFE_CATEGORIES: set[str] = set() # Errors to always fix
-_BLOCK_CATEGORIES = set() # Keep this as an empty set for now;  Errors not to fix
+# Category-level filtering was specified (rule C8) and never worked: both sets were left
+# empty, so the check allowed everything while reading like protection (TODO-3). It is
+# superseded by _BLOCK_RULES below — category granularity proved too coarse, since
+# PUNCTUATION as a whole carries fixes this product wants and only one of its rules is
+# harmful.
 
 # Rules whose "correction" destroys information the user put there deliberately.
 # Blocked by rule id rather than by category: PUNCTUATION as a whole carries useful
@@ -21,32 +25,6 @@ _BLOCK_RULES = {
     "DOUBLE_PUNCTUATION",
 }
 _DEBUG_FILTER = os.getenv("LT_DEBUG_FILTER", "1").lower() in {"1", "true", "yes", "on"} # Debug flag
-
-# Tokens that are always considered safe and won't be changed
-_SAFE_TOKENS = {
-    # Articles
-    "le", "la", "les", "l", "un", "une", "des", "du", "au", "aux",
-    # Common prepositions
-    "de", "à", "en", "dans", "pour", "par", "avec", "sans", "sur", "sous",
-    "entre", "vers", "chez", "depuis", "pendant", "avant", "après",
-    # Common contractions
-    "d", "j", "m", "t", "s", "n", "c", "qu", "c'est",
-    # Basic conjunctions
-    "et", "ou", "mais", "donc", "or", "ni", "car",
-    # Common pronouns
-    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles",
-    "me", "te", "se", "ce", "lui", "leur", "y", "en",
-    # Common verbs (être, avoir conjugations)
-    "suis", "es", "est", "sommes", "êtes", "sont",
-    "ai", "as", "a", "avons", "avez", "ont",
-    "été", "eu", "fait", "dit", "vu", "pris",
-    # Common past participles
-    "mangé", "acheté", "parlé", "donné", "allé", "venu", "parti",
-    # Common plural forms
-    "chats", "chiens", "livres", "maisons", "enfants", "amis",
-    # Punctuation and symbols
-    ",", ".", ";", ":", "?", "!", "'", "-", "...",
-}
 
 _digits_re = re.compile(r"\d")
 
@@ -68,17 +46,6 @@ def _first_replacement(match) -> str | None:
     """Get the first replacement suggestion from the match"""
     reps = match.replacements or []
     return reps[0] if reps else None
-
-def _safe_by_category(match) -> bool:
-    """Determine if the match category is considered safe"""
-    cat = _category_of(match)
-    if any(bad in cat for bad in _BLOCK_CATEGORIES):
-        return False # Blocked category, error should not be fixed
-    if not _SAFE_CATEGORIES:
-        return True # If no safe categories defined, allow all
-    if not cat:
-        return True # No category info, allow
-    return any(good in cat for good in _SAFE_CATEGORIES)
 
  #TODO: However it can change the  digit, we need to block it ?
 def _does_not_add_digits(orig: str, repl: str) -> bool:
@@ -117,6 +84,27 @@ def _does_not_introduce_proper_noun(orig: str, repl: str) -> bool:
     return True
 
 
+def _stays_close_to_the_original(orig: str, repl: str) -> bool:
+    """Refuse a replacement that is too far from the span it replaces to be a spelling fix.
+
+    LanguageTool degrades badly on heavily corrupted input: the corpus caught it turning
+    "montrré commen" into "m'entre nommer-en" and "kompliqué" into "complice". Those are
+    rewrites, not corrections, and they reach a reader who has no way to tell.
+
+    Judging the replacement against *its own span* is what makes this work. The whole-text
+    policy layer cannot separate a good fix from a bad one — "preske" -> "presque" and
+    "depui" -> "d'appui" are both two edits — but at this granularity a rewrite is
+    structurally far from what it replaces while a spelling fix is not.
+
+    Re-segmentation is unaffected: "unepomme" -> "une pomme" normalises to the same string.
+    """
+    original = normalise_for_comparison(orig)
+    replacement = normalise_for_comparison(repl)
+    if not original:
+        return True
+    return within_edit_distance(original, replacement, edit_budget(original))
+
+
 def _does_not_insert_words(orig: str, repl: str) -> bool:
     """Allow re-segmenting the user's letters; refuse inserting a word they never wrote.
 
@@ -140,24 +128,6 @@ def _does_not_insert_words(orig: str, repl: str) -> bool:
     budget = 1 if len(original) <= 8 else 2
     return within_edit_distance(original, replacement, budget)
 
-
-def _is_whitelist_change(orig: str, repl: str) -> bool:
-    """
-    Check if the change only involves tokens from the whitelist.
-    Returns True if all new or modified tokens are in the safe token set.
-    """
-    orig_tokens = {t.lower() for t in orig.split() if t.strip()}
-    repl_tokens = {t.lower() for t in repl.split() if t.strip()}
-    
-    # Tokens that were added or modified
-    new_tokens = repl_tokens - orig_tokens
-    
-    # If there are no new tokens, it's safe (only deletion)
-    if not new_tokens:
-        return True
-    
-    # Verify that all new tokens are in the safe set
-    return all(token in _SAFE_TOKENS for token in new_tokens)
 
 def _debug(reason: str, match, orig: str | None = None, repl: str | None = None) -> None:
     # Debugging output for filtering decisions
@@ -227,27 +197,21 @@ class LTImprover(TextImprover):
                     _debug("no_replacement", m)
                     continue
 
-                if not _safe_by_category(m):
-                    _debug("blocked_category", m, repl=repl)
-                    continue
-
                 if not _safe_by_rule(m):
                     _debug("blocked_rule", m, repl=repl)
                     continue
 
                 orig = current[m.offset : m.offset + m.errorLength]
 
-                # The whitelist check (_is_whitelist_change) is deliberately not called: it
-                # blocked legitimate corrections like "sui"->"suis" and "chat"->"chats".
-                # The guards that actually run on every replacement are, in order:
-                #   _safe_by_rule                  blocked rule ids (TODO-10)
-                #   _does_not_add_digits           no digit introduced
+                # Guards applied to every replacement, in order:
+                #   _safe_by_rule                    blocked rule ids (TODO-10)
+                #   _does_not_add_digits             no digit introduced
                 #   _does_not_introduce_proper_noun  no invented capitalised word (TODO-9)
-                #   _does_not_insert_words         no word the user never wrote (A5)
-                #   _token_delta_ok                at most one extra token
-                # Note what is *not* here: entity masking happens before correction and does
-                # not validate the result, and _safe_by_category is inert while both
-                # category sets are empty (TODO-3).
+                #   _does_not_insert_words           no word the user never wrote (A5)
+                #   _stays_close_to_the_original     a fix, not a rewrite
+                #   _token_delta_ok                  at most one extra token
+                # The finished text is then judged as a whole by should_accept_correction
+                # below. Entity masking runs before correction and validates nothing.
 
                 if not _does_not_add_digits(orig, repl):
                     _debug("adds_digits", m, orig=orig, repl=repl)
@@ -259,6 +223,10 @@ class LTImprover(TextImprover):
 
                 if not _does_not_insert_words(orig, repl):
                     _debug("inserts_words", m, orig=orig, repl=repl)
+                    continue
+
+                if not _stays_close_to_the_original(orig, repl):
+                    _debug("rewrite_not_correction", m, orig=orig, repl=repl)
                     continue
                 
                 # CORRECTED LINE 132 (adjust line number if other changes were made)
@@ -278,6 +246,16 @@ class LTImprover(TextImprover):
 
         if masked:
             out = reinject_entities(out, masked)
+
+        # Final gate. The per-replacement guards above filter individual suggestions;
+        # this judges the finished text against what the user actually wrote. On failure
+        # the user keeps their own words, which is the cheaper of the two mistakes.
+        if self.nlp is not None:
+            verdict = should_accept_correction(text, out, self.nlp)
+            if not verdict.passed:
+                if _DEBUG_FILTER:
+                    print(f"[LT_FILTER] rejected_result reason={verdict.reason}")
+                return text
 
         return out
 

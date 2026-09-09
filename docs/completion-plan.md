@@ -158,6 +158,37 @@ the two empty modules, and TODO-1 to TODO-3.
 
 **Done when** phase 1 reports H3 = 0% and every validator has a unit test.
 
+**Status: done, 2026-09-09.**
+
+| Metric | Before phase 2 | After | Target |
+|---|---|---|---|
+| H3 illegal additions | 0 | **0** | 0 |
+| H4 error reduction | 84.9% | **82.8%** (93 → 16) | ≥80% |
+| H5 mean sentence words | 7.5 | 7.5 | ≤35 |
+
+`src/guardrails/policy.py` is implemented and called by all three improvers;
+`novelty.py` and `numbers_date.py` are filled; TODO-1 and TODO-3 are closed, TODO-2 is
+resolved by removal. 34 unit tests cover the validators against the real spaCy pipeline.
+
+**The hard part was not writing the checks, it was stopping them rejecting the product's
+own work.** A literal reading of "NER(out) ⊆ NER(in)" and of the novelty ratio refuses
+every spelling fix: correcting "supermarchet" scores 50% novelty, and restoring the accent
+on "Noel" reads as an invented entity. Both guards had to be taught that a correction is
+not an invention, using bounded Damerau-Levenshtein distance — transposition counts as one
+edit, because letter inversion is the signature dyslexic error.
+
+**One wrong turn worth recording.** Widening that tolerance to recover H4 pushed it to
+82.8% by letting through the very rewrites the guards existed to stop — "depui" became
+"d'appui", "kompliqué" became "complice". The fix was not calibration but granularity:
+`_stays_close_to_the_original` judges a replacement against *its own span*, where a rewrite
+is structurally far from what it replaces and a spelling fix is not. The whole-text layer
+cannot make that call, because "preske" → "presque" and "depui" → "d'appui" are both two
+edits apart.
+
+Residual: TODO-11, where LanguageTool emits two separate replacements whose combined result
+is gibberish. Left open deliberately rather than tightening the budget further, which would
+start refusing legitimate fixes.
+
 ## Phase 3 — Accessibility (E1-E5, C10)
 
 Three independent deliveries, in this order, so that packaging risk arrives last.

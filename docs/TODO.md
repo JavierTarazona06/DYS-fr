@@ -5,7 +5,7 @@ changelog: entries move to **Fixed** at the bottom when they are closed, with a 
 note of how.
 
 [completion-plan.md](completion-plan.md) schedules this queue: the decisions below were
-Phase 0; TODO-1, TODO-2 and TODO-3 are Phase 2; TODO-4 to TODO-8 are Phase 4.
+Phase 0; TODO-2 is Phase 2; TODO-4 to TODO-8 and TODO-11 are Phase 4.
 TODO-9 and TODO-10 were fixed on 2026-09-08.
 
 Two populations only:
@@ -22,29 +22,6 @@ decisions about what to build, not defects. They stay catalogued in
 ---
 
 ## Code defects
-
-### TODO-1 · Degradation guardrail can accept a worse rewrite — **High**
-
-`src/improvers/llm_improver.py:270`
-
-The hybrid pipeline's only post-validation check compares error counts before and after
-the LLM pass. Both counts are taken from the **capped hint list**, not from the raw
-LanguageTool matches:
-
-```
-error_count_before = len(lt_hints)        # line 204, hints capped at max(5, n*0.1)
-error_count_after  = len(lt_hints_after)  # line 260, same cap
-if error_count_after > error_count_before: # line 270
-```
-
-Because `_extract_lt_hints` truncates at `max(5, len(matches) * 0.1)` (line 126), both
-sides saturate. A text with 10 errors before and 50 after yields `5 > 5` → false, and the
-degraded rewrite is **accepted and returned to the user**. The raw count is available on
-line 202 but commented out.
-
-`ollama_improver.py` does not have this bug: it compares raw counts (lines 68 and 91).
-
-Affects rule D2, and makes H12's untested degradation check untestable as written.
 
 ### TODO-2 · Whitelist guardrail disabled, with a comment that misstates why — **High**
 
@@ -70,23 +47,6 @@ the result and that `_safe_by_category` is inert. What remains open is the decis
 itself — keep the whitelist disabled, or repair and re-enable it.
 
 Affects rule A11.
-
-### TODO-3 · LanguageTool category filter is structurally a no-op — **Medium-High**
-
-`src/improvers/lt_improver.py:10-11`
-
-```python
-_SAFE_CATEGORIES: set[str] = set()
-_BLOCK_CATEGORIES = set()
-```
-
-With both sets empty, `_safe_by_category` (line 61) returns `True` for every match: the
-block loop finds nothing, and the `if not _SAFE_CATEGORIES` short-circuit allows all. The
-call site at line 168 reads like category filtering and filters nothing.
-
-Same failure mode as TODO-2: apparent protection.
-
-Affects rule C8.
 
 ### TODO-4 · Configured temperature is silently discarded — **Medium**
 
@@ -133,6 +93,29 @@ target.
 
 Affects rules G3, G8, G9.
 
+### TODO-11 · LanguageTool rewrites adjacent corrupted words — **Medium**
+
+Found by the QA corpus, text `t24`. Two injected errors landing on neighbouring words:
+
+```
+IN : Il m'a montrré commen changer une chambre à air.
+OUT: Il m'a m'entre nommer-en changer une chambre à air.
+```
+
+`_stays_close_to_the_original` blocks a rewrite when LanguageTool proposes it as one
+replacement — it stops "kompliqué" becoming "complice" in the same text. Here LanguageTool
+emits two *separate* matches, each individually within the edit budget, whose combined
+result is gibberish.
+
+Deliberately not fixed by tightening the budget further: that would start refusing
+legitimate fixes like "preske" -> "presque", which sits at the same distance. A real fix
+needs to judge adjacent replacements together rather than one at a time, or to give up on a
+span the spell checker cannot resolve confidently.
+
+The metrics still pass — H3 is 0 and H4 is above target — because the rest of the text is
+corrected. But a reader would see this output and conclude the tool is broken, which is a
+different and worse failure than a missed correction.
+
 ### TODO-8 · Misleading comment on the hint cap — **Low**
 
 `src/improvers/llm_improver.py:128`
@@ -140,6 +123,7 @@ Affects rules G3, G8, G9.
 The inline comment says `# Limit to top 5 errors`; the expression is
 `max(5, len(matches) * 0.1)`, which exceeds 5 on any text with more than 50 matches.
 Affects rule D4. Contributing cause of TODO-1.
+
 ---
 
 ## Decisions taken
@@ -181,6 +165,55 @@ or build the features.
 ---
 
 ## Fixed
+
+### TODO-1 · Degradation guardrail can accept a worse rewrite — **High**
+
+`src/improvers/llm_improver.py:270`
+
+The hybrid pipeline's only post-validation check compares error counts before and after
+the LLM pass. Both counts are taken from the **capped hint list**, not from the raw
+LanguageTool matches:
+
+```
+error_count_before = len(lt_hints)        # line 204, hints capped at max(5, n*0.1)
+error_count_after  = len(lt_hints_after)  # line 260, same cap
+if error_count_after > error_count_before: # line 270
+```
+
+Because `_extract_lt_hints` truncates at `max(5, len(matches) * 0.1)` (line 126), both
+sides saturate. A text with 10 errors before and 50 after yields `5 > 5` → false, and the
+degraded rewrite is **accepted and returned to the user**. The raw count is available on
+line 202 but commented out.
+
+`ollama_improver.py` does not have this bug: it compares raw counts (lines 68 and 91).
+
+Affects rule D2, and makes H12's untested degradation check untestable as written.
+
+**Fixed 2026-09-09**: both sides now count raw LanguageTool matches
+(`src/improvers/llm_improver.py`). The commented-out correct line was restored and the
+hint list is used only for prompting.
+
+### TODO-3 · LanguageTool category filter is structurally a no-op — **Medium-High**
+
+`src/improvers/lt_improver.py:10-11`
+
+```python
+_SAFE_CATEGORIES: set[str] = set()
+_BLOCK_CATEGORIES = set()
+```
+
+With both sets empty, `_safe_by_category` (line 61) returns `True` for every match: the
+block loop finds nothing, and the `if not _SAFE_CATEGORIES` short-circuit allows all. The
+call site at line 168 reads like category filtering and filters nothing.
+
+Same failure mode as TODO-2: apparent protection.
+
+Affects rule C8.
+
+**Resolved 2026-09-09** by removal. The two empty sets and `_safe_by_category` are gone;
+rule C8 is now realised by `_BLOCK_RULES`, which blocks by rule id. Category granularity
+proved too coarse: PUNCTUATION as a whole carries fixes this product wants and only one
+of its rules is harmful.
 
 ### TODO-9 · LanguageTool substitutes a proper noun for a garbled word — **High**
 

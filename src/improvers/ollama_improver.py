@@ -2,6 +2,7 @@ from __future__ import annotations
 import ollama
 from spacy.language import Language
 from src.guardrails.entities import mask_entities, reinject_entities
+from src.guardrails.policy import should_accept_correction
 from .base import TextImprover
 from .lt_client import LTClient
 
@@ -99,5 +100,13 @@ class OllamaImprover(TextImprover):
         # 5. Reinject Entities
         if masked:
             final_text = reinject_entities(final_text, masked)
+
+        # 6. Final gate, same policy as the other improvers.
+        if self.nlp is not None:
+            verdict = should_accept_correction(text, final_text, self.nlp)
+            if not verdict.passed:
+                if debug:
+                    print(f"Rejected by guardrails: {verdict.reason}")
+                return text
 
         return final_text

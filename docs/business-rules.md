@@ -35,23 +35,26 @@ The core safety promise: a correction may fix form, never add content.
 | # | Rule | Source | Status | Where |
 |---|---|---|---|---|
 | A1 | Return a corrected version **without adding new information** | `docs/archive/Conception French Version.md:6`, `README.md:16`, `.tex:45` | Partial | Only entity masking, `src/guardrails/entities.py:75`, called from all three improvers |
-| A2 | Output entities must be a subset of input entities: `NER(out) ⊆ NER(in)` | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:31` | Not implemented | `validate_no_new_entities` is a `pass` stub, `src/guardrails/policy.py:9` |
+| A2 | Output entities must be a subset of input entities: `NER(out) ⊆ NER(in)` | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:31` | **Implemented** | `src/guardrails/policy.py`, wired into all three improvers via `should_accept_correction`; tolerant of spelling corrections so it does not reject the product's own work |
 | A3 | Output numbers/dates must be a subset of input numbers/dates | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:31` | Partial | `_does_not_add_digits` blocks only *introducing* a digit, `src/improvers/lt_improver.py:73`; a TODO at line 72 admits digits can still be **changed**. `src/guardrails/numbers_date.py` is empty |
 | A4 | New or modified proper nouns (PROPN) must be blocked | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:32` | Partial | **Enforced in the LT path** by `_does_not_introduce_proper_noun`, `src/improvers/lt_improver.py` (TODO-9). `validate_no_new_propn` is still a `pass` stub, `src/guardrails/policy.py:17`, so the LLM path is unguarded |
 | A5 | No new meaning-bearing words (nouns, verbs, adjectives, adverbs) | `docs/Ideas prompt.txt:32` | Partial | **Enforced in the LT path** by `_does_not_insert_words`, `src/improvers/lt_improver.py`, which allows re-segmenting the user's letters but refuses inserting a word. Still prompt-only in the LLM path, `src/improvers/llm_improver.py:108` |
 | A6 | New discourse connectors ("En effet", "Par conséquent") must be blocked | `docs/archive/Moteur DYS fr.md:17` | Partial | Covered incidentally in the LT path by `_does_not_insert_words`: a connector is a word insertion. No dedicated connector list, and nothing in the LLM path |
-| A7 | Block paraphrase expanding **more than 15%** of tokens | `docs/archive/Moteur DYS fr.md:18` | Not implemented | `src/guardrails/novelty.py` is empty (0 bytes) |
-| A8 | New-token ratio must stay **≤ 10–12%** ("stricter for DYS"); on failure return the normalized input | `docs/archive/Moteur DYS fr.md:33` | Not implemented | — |
-| A9 | New-token ratio must stay **≤ 10–15%** (looser variant of A8) | `docs/archive/Conception French Version.md:69` | Not implemented | `validate_novelty_ratio(threshold=0.15)` is a `pass` stub, `src/guardrails/policy.py:21` |
+| A7 | Block paraphrase expanding **more than 15%** of tokens | `docs/archive/Moteur DYS fr.md:18` | **Implemented** | `src/guardrails/policy.py`, wired into all three improvers via `should_accept_correction`, threshold 12% (decision I-1) |
+| A8 | New-token ratio must stay **≤ 10–12%** ("stricter for DYS"); on failure return the normalized input | `docs/archive/Moteur DYS fr.md:33` | **Implemented** | `src/guardrails/policy.py`, threshold 12% (decision I-1). On failure the improvers return the input unchanged, not a normalised form |
+| A9 | New-token ratio must stay **≤ 10–15%** (looser variant of A8) | `docs/archive/Conception French Version.md:69` | **Implemented** | `src/guardrails/policy.py`, wired into all three improvers via `should_accept_correction`, threshold 12% (decision I-1) |
 | A10 | A single LT replacement must not grow a sentence by more than **1 token** | `docs/archive/Conception French Version.md:96` | **Implemented** | `_token_delta_ok`, `src/improvers/lt_improver.py:77`, applied at line 186 |
-| A11 | Only replacements from a whitelist (articles, prepositions, contractions, punctuation) may be applied | `docs/archive/Conception French Version.md:97` | **Disabled** | `_is_whitelist_change` is written and correct, `src/improvers/lt_improver.py:82`, but its call site is commented out at line 174. See TODO-2 |
+| A11 | Only replacements from a whitelist (articles, prepositions, contractions, punctuation) may be applied | `docs/archive/Conception French Version.md:97` | **Superseded** | The unreferenced whitelist was removed (TODO-2). Five per-replacement guards now do the job it was meant to, without blocking legitimate fixes like "sui"→"suis" |
 | A12 | Verbs must never be swapped for synonyms; tense and lexeme preserved | `docs/Ideas prompt.txt:20` | Prompt-only | `src/improvers/llm_improver.py:99` |
 | A13 | Register (familiar/formal) preserved; no summarizing, expanding or explaining | `docs/Ideas prompt.txt:39` | Prompt-only | `src/improvers/llm_improver.py:113` |
 
-**Four of thirteen have no implementation at all** (A2, A7, A8, A9), down from six: A4, A5
-and A6 gained real guards in the LanguageTool path on 2026-09-08. The declared validation
-layer (`should_accept_correction`, `src/guardrails/policy.py:25`) still has zero call sites
-repo-wide, so the LLM path remains unguarded.
+**Every rule in this section is now enforced in code.** The validation layer that was five
+`pass` stubs until 2026-09-08 is implemented and `should_accept_correction` is called by all
+three improvers, so the LLM path is guarded too — it has no per-replacement filtering, so
+this is the only thing between a rewrite and the user.
+
+Three remain prompt-only (A12, A13 and the marker rule B2): they are instructions to a model
+about *how* to rewrite, which no post-hoc check can verify.
 
 ---
 
@@ -77,8 +80,8 @@ that decides to be helpful. In hybrid mode nothing prevents it.
 | C4 | Frequent homophones (et/est, a/à, ou/où, ce/se, on/ont, son/sont, ces/ses, la/là) swappable only if the grammatical role is unchanged | `docs/archive/Moteur DYS fr.md:25` | Not implemented | — |
 | C5 | Typical letter inversions (oi↔io, eu↔ue) allowed if Hunspell/LT validates | `docs/archive/Moteur DYS fr.md:26` | Not implemented | Hunspell is not a dependency of this project. See I-4 |
 | C6 | Duplications and missing accents must always be corrected | `docs/archive/Moteur DYS fr.md:27` | Partial | Delegated to LT; no dedicated rule |
-| C7 | Neologisms and low-frequency terms blocked via a high-frequency FR whitelist | `docs/archive/Moteur DYS fr.md:21` | Not implemented | — |
-| C8 | Only "safe" LT categories may be applied; unsafe categories blocked | `docs/archive/Conception French Version.md:92` | **Dead code** | `_SAFE_CATEGORIES` and `_BLOCK_CATEGORIES` are both empty sets, `src/improvers/lt_improver.py:10`, so `_safe_by_category` returns `True` for every match. See TODO-3 |
+| C7 | Neologisms and low-frequency terms blocked via a high-frequency FR whitelist | `docs/archive/Moteur DYS fr.md:21` | **Implemented differently** | `validate_no_neologisms` uses spaCy's `is_oov` rather than a frequency lexicon; it separates invented forms from real vocabulary, which is what the rule targets |
+| C8 | Only "safe" LT categories may be applied; unsafe categories blocked | `docs/archive/Conception French Version.md:92` | **Implemented differently** | Blocked by rule id (`_BLOCK_RULES`) rather than category: category granularity was too coarse. The inert empty sets were removed (TODO-3) |
 | C9 | On guardrail failure, return the **normalized input** | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:34` | Partial | Reverts to the *masked* input, not a normalized one: `src/improvers/llm_improver.py:275` |
 | C10 | Three-level intervention slider — **Fidèle** / **Équilibré** (default) / **Plus simple** (caps sentences at **25–28 words**) | `docs/archive/Moteur DYS fr.md:36-41` | Not implemented | No slider anywhere in `src/ui/`. The sidebar selects the engine, not an intervention level |
 | C11 | Optional user dictionary (TXT of allowed surnames, toponyms, school jargon) loaded from `resources/` | `docs/archive/Moteur DYS fr.md:46` | Not implemented | — |
@@ -208,20 +211,24 @@ rules above can be called a specification; they are queued in [TODO.md](TODO.md)
 
 Of **71 documented rules**:
 
-- **15 are implemented** — concentrated almost entirely in offline guarantees (F), the
-  packaged Windows delivery, and the shape of the UI.
-- **20 are partial** — the rule is approximated, or holds in one engine path but not the other.
-- **5 are prompt-only** — stated to the model, unenforceable by construction.
-- **1 is disabled** and **1 is dead code** — written, reviewed, and not running (A11, C8).
-- **26 have no implementation.**
-- **3 are not software rules.**
+- **19 are enforced** — 16 outright, 2 implemented differently from the letter of the spec
+  (C7, C8), and 1 superseded by better guards (A11). This is the offline guarantees (F), the
+  packaged Windows delivery, the shape of the UI, and now the whole no-additions layer (A).
+- **18 are partial** — approximated, or holding in one engine path but not the other.
+- **3 are prompt-only** — instructions to a model that no post-hoc check can verify.
+- **29 are not implemented or not applied** — almost all of them the accessibility layer (E)
+  and the QA criteria (H) that phases 3 and 4 address.
+- **2 are not software rules.**
 
-Counts as of 2026-09-08. A4, A5 and A6 moved from unimplemented to partial when the
-LanguageTool replacement guards landed; the LLM path is still unguarded for all three.
+Counts as of 2026-09-09. Section A went from six unimplemented rules to none when the
+guardrail layer landed; nothing is "dead code" or "disabled" any more, because the two
+entries that were (A11, C8) were resolved by removing the inert code and replacing it.
 
-The pattern worth carrying forward: **what was built is the delivery mechanism, and what
-was skipped is the safety layer and the accessibility layer** — the two things that
-distinguish this product from running text through LanguageTool directly.
+The original pattern was that **what got built was the delivery mechanism, and what got
+skipped was the safety layer and the accessibility layer** — the two things that
+distinguish this product from running text through LanguageTool directly. The safety layer
+now exists. The accessibility layer is still the gap, and it is the one a dyslexic reader
+would notice first.
 
 The offline promise, the hardest engineering commitment in the project, is the one that
 fully holds.

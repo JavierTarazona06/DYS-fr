@@ -172,6 +172,12 @@ class TestBoundedEditDistance:
             ("eauze", "duoze", 2, False),
             ("eauze", "duoze", 3, True),
             ("chat", "chien", 1, False),
+            # Transposition is one edit, not two: letter inversion is the signature
+            # dyslexic error and the corpus injects it deliberately.
+            ("train", "trian", 1, True),
+            ("jours", "juors", 1, True),
+            ("presque", "preske", 2, True),
+            ("presque", "preske", 1, False),
             ("court", "beaucoup plus long", 2, False),
         ],
     )

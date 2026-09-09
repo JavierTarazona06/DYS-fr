@@ -6,6 +6,7 @@ from llama_cpp import Llama
 from spacy.language import Language
 
 from src.guardrails.entities import mask_entities, reinject_entities
+from src.guardrails.policy import should_accept_correction
 from .base import TextImprover
 from .lt_client import LTClient
 
@@ -199,9 +200,11 @@ Texte corrigé (UNIQUEMENT le texte corrigé) :
         
         # Step 2: Pre-pass with LT
         lt_matches_before = self.lt_client.check(text_to_check)
-        #error_count_before = len(lt_matches_before)
         lt_hints = self._extract_lt_hints(lt_matches_before)
-        error_count_before = len(lt_hints)
+        # TODO-1: count raw LanguageTool matches, not the hint list. The hints are
+        # capped at max(5, n*0.1), so both sides of the comparison below saturate and a
+        # text that got much worse compares equal to one that got slightly worse.
+        error_count_before = len(lt_matches_before)
         
         if debug:
             print(f"{'='*70}")
@@ -257,7 +260,7 @@ Texte corrigé (UNIQUEMENT le texte corrigé) :
         
         lt_matches_after = self.lt_client.check(llm_output)
         lt_hints_after = self._extract_lt_hints(lt_matches_after)
-        error_count_after = len(lt_hints_after)
+        error_count_after = len(lt_matches_after)  # raw, see TODO-1 above
 
         if debug:
             print(f"Errores antes:  {error_count_before}")
@@ -297,6 +300,15 @@ Texte corrigé (UNIQUEMENT le texte corrigé) :
             print(final_text)
             print(f"{'='*70}\n")
         
+        # Final gate: the LLM path has no per-replacement filtering, so this is the only
+        # thing between a rewrite and the user.
+        if self.nlp is not None:
+            verdict = should_accept_correction(text, final_text, self.nlp)
+            if not verdict.passed:
+                if debug:
+                    print(f"REJETÉ par les garde-fous: {verdict.reason}")
+                return text
+
         return final_text
     
     def close(self):

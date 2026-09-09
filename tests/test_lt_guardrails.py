@@ -17,6 +17,7 @@ from src.improvers.lt_improver import (
     _does_not_add_digits,
     _does_not_insert_words,
     _does_not_introduce_proper_noun,
+    _stays_close_to_the_original,
     _safe_by_rule,
     _token_delta_ok,
 )
@@ -127,6 +128,37 @@ class TestWordInsertionGuard:
     def test_blocks_an_inserted_connector(self):
         # A6 forbids new discourse connectors; the same guard catches them.
         assert _does_not_insert_words("il pleut", "en effet il pleut") is False
+
+
+class TestRewriteGuard:
+    """A replacement must be a fix of its own span, not a rewrite of it.
+
+    The whole-text policy layer cannot make this call: "preske" -> "presque" and
+    "depui" -> "d'appui" are both two edits apart. At the span level a rewrite is
+    structurally far from what it replaces, and a spelling fix is not.
+    """
+
+    def test_blocks_the_rewrite_the_corpus_caught(self):
+        # Corpus text t24: LanguageTool produced gibberish a reader would trust.
+        assert _stays_close_to_the_original("montrré commen", "m'entre nommer-en") is False
+        assert _stays_close_to_the_original("kompliqué", "complice") is False
+
+    def test_allows_ordinary_spelling_fixes(self):
+        assert _stays_close_to_the_original("preske", "presque") is True
+        assert _stays_close_to_the_original("supermarchet", "supermarché") is True
+
+    def test_allows_letter_inversions(self):
+        # Damerau distance: a transposition is one edit, not two.
+        assert _stays_close_to_the_original("trian", "train") is True
+        assert _stays_close_to_the_original("juors", "jours") is True
+
+    def test_allows_re_segmentation(self):
+        assert _stays_close_to_the_original("unepomme", "une pomme") is True
+
+    def test_known_limitation_a_short_word_swap_still_passes(self):
+        """Documented, not accidental: "depui" -> "d'appui" is two edits on a five-letter
+        word, indistinguishable by distance from a legitimate fix of the same shape."""
+        assert _stays_close_to_the_original("depui", "d'appui") is True
 
 
 class TestExistingGuardsStillHold:
