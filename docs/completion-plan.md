@@ -205,6 +205,28 @@ established at `src/ui/model_manager.py:76`; the CSS injection goes immediately 
 dyslexic user meets an unstyled waiting screen. Includes `save_user_config`, the new French
 strings in `content.py`, and the `_generate_html_diff` parameterisation.
 
+**Status: 3a done, 2026-09-09.** `src/ui/appearance.py` with the settings panel in the
+sidebar, `save_user_config` in `src/utils/config.py` (the writer that never existed), and
+`_generate_html_diff` parameterised — which also closed E6. 22 unit tests, and the
+behaviour verified in the browser: the root font-size override scales the whole interface
+because Streamlit sizes everything in `rem`, so a 24px setting gives a 36px heading and a
+52.8px line box in the text area.
+
+**Two things the browser caught that no unit test would have.**
+
+The settings panel snapped shut on every rerun, including the one triggered by moving a
+slider inside it. Streamlit re-applies an expander's `expanded` argument whenever the value
+*changes* between runs, so a computed flag fights the user. It is now decided once per
+session and held constant.
+
+More seriously, **focus mode stranded the user**. The plan assumed Streamlit would keep its
+own sidebar-reopen control visible; it does not. Hiding the sidebar with `display:none`
+leaves Streamlit believing it is still expanded, so `stSidebarCollapsedControl` is never
+rendered — verified in the DOM. With the settings panel inside the hidden sidebar there was
+no route back at all short of editing the config by hand. Focus mode now ships its own exit
+button. A stranding bug in the one feature meant to reduce cognitive load is worse than the
+feature being absent.
+
 **3b — Dyslexia fonts (~8 h).** Lexend, Atkinson Hyperlegible and OpenDyslexic, all
 OFL-1.1, as latin-subset WOFF2 (~200 KB total) in `static/fonts/` with their `OFL.txt`.
 Requires a new entry in `datas` at `packaging/windows/dys_fr.spec:50-53`,

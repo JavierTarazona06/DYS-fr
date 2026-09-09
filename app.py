@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.services import factory
-from src.ui import layout, model_manager
+from src.ui import appearance, layout, model_manager
 from src.ui.content import Content
 
 st.set_page_config(page_title="DYS-fr", layout="wide", page_icon="🧠")
@@ -11,6 +11,10 @@ try:
 except Exception as exc:
     st.error(f"Critical System Error: {exc}")
     st.stop()
+
+# Before anything renders: the boot status and the error screens below appear long before
+# the sidebar exists, and a dyslexic reader should not meet an unstyled wait screen.
+reading = appearance.apply(cfg)
 
 # Paint the header before anything slow. Streamlit streams each element to the
 # browser as the script executes, so whatever is written before a slow call stays
@@ -52,6 +56,7 @@ if not lt_ready:
     st.stop()
 
 mode, model_key = layout.render_sidebar(capabilities)
+appearance.render_panel(cfg)
 model_manager.render_model_panel(cfg, capabilities)
 
 improver = None
@@ -94,4 +99,4 @@ if st.button(Content.BTN_CORRECT, type="primary"):
 
         st.subheader(Content.SECTION_RESULT)
         st.success(out)
-        layout.render_diff_view(text, out)
+        layout.render_diff_view(text, out, reading)

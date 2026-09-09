@@ -60,48 +60,59 @@ def render_sidebar(capabilities: dict):
     return mode, model_choice
 
 
-def _generate_html_diff(text1: str, text2: str) -> str:
+def _generate_html_diff(text1: str, text2: str, appearance=None) -> str:
+    """Inline diff as HTML, honouring the reader's typography settings.
+
+    This used to hardcode font, size, line-height and colours in inline `style=`
+    attributes, which win the CSS cascade — so this one function silently overrode every
+    reading-comfort setting, in the one place a dyslexic reader compares text most closely.
     """
-    Generate an HTML string with inline diffs using diff-match-patch.
-    """
+    line_height = getattr(appearance, "line_height", 1.6)
+
     dmp = dmp_module.diff_match_patch()
 
     diffs = dmp.diff_main(text1, text2)
     dmp.diff_cleanupSemantic(diffs)
 
     html = []
+    # No font-family or font-size: both are inherited, so the root override applies here
+    # like everywhere else.
     html.append(
-        "<div style='line-height: 1.8; font-family: sans-serif; font-size: 16px; "
-        "border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #fafafa;'>"
+        f"<div style='line-height: {line_height}; border: 1px solid #ddd; "
+        "padding: 15px; border-radius: 5px;'>"
     )
 
     for op, data in diffs:
         text = data.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
 
         if op == 0:
-            html.append(f"<span style='color: #333;'>{text}</span>")
+            html.append(f"<span>{text}</span>")
         elif op == 1:
+            # E6 asks for underline, not bold: underline survives a high-contrast theme
+            # and does not rely on colour alone to carry meaning.
             html.append(
-                "<strong style='background-color: #d4edda; color: #155724; "
-                f"border-radius: 3px; padding: 0 2px;'>{text}</strong>"
+                "<span style='background-color: #d4edda; color: #155724; "
+                f"text-decoration: underline; padding: 0 2px;'>{text}</span>"
             )
         elif op == -1:
+            # The opacity this used to carry lowered contrast on deleted text, which is
+            # exactly the text the reader is trying to compare.
             html.append(
                 "<span style='background-color: #f8d7da; color: #721c24; "
-                f"text-decoration: line-through; opacity: 0.8; padding: 0 2px;'>{text}</span>"
+                f"text-decoration: line-through; padding: 0 2px;'>{text}</span>"
             )
 
     html.append("</div>")
     return "".join(html)
 
 
-def render_diff_view(original: str, corrected: str):
+def render_diff_view(original: str, corrected: str, appearance=None):
     """Render the before/after diff view."""
     with st.expander(Content.SECTION_DIFF, expanded=True):
         if HAS_DMP:
             st.markdown("### Comparaison visuelle")
             st.caption("Vert = Ajouté/Modifié | Rouge = Supprimé")
-            diff_html = _generate_html_diff(original, corrected)
+            diff_html = _generate_html_diff(original, corrected, appearance)
             st.markdown(diff_html, unsafe_allow_html=True)
 
             st.markdown("---")

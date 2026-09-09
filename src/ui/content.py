@@ -36,6 +36,21 @@ class Content:
     SECTION_RESULT = "Texte corrigé"
     SECTION_DIFF = "Voir les différences"
 
+    APPEARANCE_TITLE = "Confort de lecture"
+    APPEARANCE_FONT_SIZE = "Taille du texte"
+    APPEARANCE_FONT_SIZE_HELP = "Agrandit tout le texte de l'application."
+    APPEARANCE_LINE_HEIGHT = "Interligne"
+    APPEARANCE_LINE_HEIGHT_HELP = (
+        "Espace entre les lignes. Un interligne plus large facilite le suivi du texte."
+    )
+    APPEARANCE_FOCUS = "Mode sans distraction"
+    APPEARANCE_FOCUS_HELP = (
+        "Masque les menus et le panneau latéral. Un bouton en haut de la page permet "
+        "d'en sortir."
+    )
+    APPEARANCE_FOCUS_EXIT = "Quitter le mode sans distraction"
+    APPEARANCE_RESET = "Réinitialiser"
+
     BOOT_TITLE = "Démarrage de DYS-fr…"
     BOOT_SPACY = "Chargement du modèle linguistique…"
     BOOT_LT = "Connexion au correcteur LanguageTool…"

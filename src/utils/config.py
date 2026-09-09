@@ -46,3 +46,32 @@ def load_config(path: str | Path | None = None, *, include_user_override: bool =
             config = _deep_merge(config, override)
 
     return config
+
+
+def save_user_config(updates: dict[str, Any]) -> Path:
+    """Merge `updates` into the per-user override file and write it atomically.
+
+    The read side of this has existed since the beginning; nothing ever wrote the file.
+    It has to be this location: the application installs into Program Files, which is
+    read-only for a standard user, and `packaging/windows/smoke_test.py` fails the build if
+    anything writes inside the install directory.
+
+    Merging rather than replacing matters — the same file carries the model download
+    overrides, and saving an appearance preference must not drop them.
+    """
+    path = get_user_config_path(create_parent=True)
+
+    current: dict[str, Any] = {}
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as handle:
+            current = yaml.safe_load(handle) or {}
+
+    merged = _deep_merge(current, updates)
+
+    # Write to a sibling and replace, so an interrupted save cannot leave the user with a
+    # truncated config that stops the application loading.
+    temp_path = path.with_name(path.name + ".tmp")
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(merged, handle, allow_unicode=True, sort_keys=False)
+    os.replace(temp_path, path)
+    return path

@@ -110,11 +110,11 @@ The reason the product exists. This is the weakest section in the inventory.
 | # | Rule | Source | Status | Where |
 |---|---|---|---|---|
 | E1 | Dyslexia-friendly fonts: Lexend, Atkinson Hyperlegible, OpenDyslexic | `README.md:8` | Not implemented | No occurrence of any of the three names anywhere in the repository. `src/ui/layout.py:74` hardcodes `font-family: sans-serif` |
-| E2 | Adjustable font size | `README.md:8`, `.tex:59` | Not implemented | No slider widget exists in the repository |
-| E3 | Adjustable line spacing | `README.md:8`, `.tex:59` | Not implemented | Line height is hardcoded to `1.8`, and only inside the diff block, `src/ui/layout.py:74` |
+| E2 | Adjustable font size | `README.md:8`, `.tex:59` | **Implemented** | `src/ui/appearance.py`, persisted to `%LOCALAPPDATA%\DYS-fr\config.yaml`. Overrides the root font size, which scales the whole interface because Streamlit sizes everything in `rem` |
+| E3 | Adjustable line spacing | `README.md:8`, `.tex:59` | **Implemented** | `src/ui/appearance.py`, persisted to `%LOCALAPPDATA%\DYS-fr\config.yaml`. Default 1.6, which satisfies WCAG 1.4.12 |
 | E4 | High-contrast mode | `README.md:8`, `.tex:59` | Not implemented | No `.streamlit/config.toml`, no theme toggle. Diff colours are hardcoded light-mode pastels, `src/ui/layout.py:82-91` |
-| E5 | Distraction-free focus mode | `README.md:8` | Not implemented | — |
-| E6 | Diff view: additions underlined, deletions struck through | `docs/archive/Conception French Version.md:84`, `README.md:23`, `.tex:73` | Partial | Deletions are struck through (`src/ui/layout.py:91`); additions are bold on a green background, not underlined (line 85) |
+| E5 | Distraction-free focus mode | `README.md:8` | **Implemented** | `src/ui/appearance.py`, persisted to `%LOCALAPPDATA%\DYS-fr\config.yaml`. Hides the Streamlit chrome and the sidebar, and ships its own exit button: hiding the sidebar with `display:none` leaves Streamlit believing it is expanded, so no native control appears |
+| E6 | Diff view: additions underlined, deletions struck through | `docs/archive/Conception French Version.md:84`, `README.md:23`, `.tex:73` | **Implemented** | `src/ui/layout.py`. Additions are underlined rather than bold, and the `opacity: 0.8` that lowered contrast on deleted text is gone |
 | E7 | Explicit "offline / no data sent" label in the UI | `docs/archive/Conception French Version.md:116` | **Implemented** | `src/ui/content.py:25` |
 | E8 | Single-screen UI: text area, one action button, mode selector, diff and final text | `docs/archive/Conception French Version.md:107-113`, `.tex:103` | **Implemented** | `app.py:41-61`, `src/ui/layout.py:19-113` (an expander rather than tabs) |
 | E9 | Loading progress bar and quality/latency profiles (Rapide / Équilibré / Max Qualité) | `docs/archive/Conception French Version.md:112` | Not implemented | Only a spinner, `app.py:29` |
@@ -211,18 +211,20 @@ rules above can be called a specification; they are queued in [TODO.md](TODO.md)
 
 Of **71 documented rules**:
 
-- **19 are enforced** — 16 outright, 2 implemented differently from the letter of the spec
-  (C7, C8), and 1 superseded by better guards (A11). This is the offline guarantees (F), the
-  packaged Windows delivery, the shape of the UI, and now the whole no-additions layer (A).
+- **23 are enforced** — 20 outright, 2 implemented differently from the letter of the spec
+  (C7, C8), and 1 superseded by better guards (A11). The offline guarantees (F), the
+  packaged Windows delivery, the whole no-additions layer (A), and reading comfort (E2, E3,
+  E5, E6).
 - **18 are partial** — approximated, or holding in one engine path but not the other.
 - **3 are prompt-only** — instructions to a model that no post-hoc check can verify.
-- **29 are not implemented or not applied** — almost all of them the accessibility layer (E)
-  and the QA criteria (H) that phases 3 and 4 address.
+- **25 are not implemented or not applied** — the rest of the accessibility layer (E1 fonts,
+  E4 high contrast, E9 profiles) and the QA criteria (H).
 - **2 are not software rules.**
 
 Counts as of 2026-09-09. Section A went from six unimplemented rules to none when the
-guardrail layer landed; nothing is "dead code" or "disabled" any more, because the two
-entries that were (A11, C8) were resolved by removing the inert code and replacing it.
+guardrail layer landed, and three of the five advertised accessibility features now exist.
+Nothing is "dead code" or "disabled" any more: the two entries that were (A11, C8) were
+resolved by removing the inert code and replacing it.
 
 The original pattern was that **what got built was the delivery mechanism, and what got
 skipped was the safety layer and the accessibility layer** — the two things that
