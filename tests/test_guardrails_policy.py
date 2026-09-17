@@ -25,12 +25,14 @@ from src.guardrails.numbers_date import (
 )
 from src.guardrails.policy import (
     should_accept_correction,
+    validate_no_lost_content_words,
     validate_no_neologisms,
     validate_no_new_entities,
     validate_no_new_numbers_dates,
     validate_no_new_propn,
     validate_novelty_ratio,
 )
+from src.utils.text import sound_key, within_edit_distance
 
 
 @pytest.fixture(scope="module")
@@ -170,6 +172,71 @@ class TestValidateNoNeologisms:
         assert "zorglubait" in result.reason
 
 
+class TestSoundKey:
+    """Pure text. Phonetic spellings must land within an edit of their word."""
+
+    @pytest.mark.parametrize(
+        "written, meant",
+        [("kom", "comme"), ("koman", "comment"), ("otomobil", "automobile"), ("ki", "qui"),
+         ("sinéma", "cinéma"), ("rouj", "rouge"), ("khat", "chat"), ("aniversère", "anniversaire")],
+    )
+    def test_phonetic_spellings_sound_like_their_word(self, written, meant):
+        assert within_edit_distance(sound_key(written), sound_key(meant), 1)
+
+    def test_different_words_stay_apart(self):
+        assert not within_edit_distance(sound_key("aller"), sound_key("au"), 1)
+        assert not within_edit_distance(sound_key("quartier"), sound_key("monde"), 1)
+
+    def test_numbers_have_no_sound(self):
+        assert sound_key("35") == ""
+
+
+class TestValidateNoLostContentWords:
+    """TODO-14: the counterpart of the novelty ratio. Cases are real LLM output."""
+
+    @pytest.mark.parametrize(
+        "original, corrected",
+        [
+            # The deletion that found the gap: the verb is gone, nothing was added.
+            ("Je sui aller au magasin.", "Je suis au magasin."),
+            ("Le train de sept heure quarante et souven complet.",
+             "Le train des sept heures quarante est complet."),
+            # A substitution: something stands in the word's place, but a different word.
+            ("Cela réveille tout le quartié.", "Cela réveille tout le monde."),
+            ("Il faut apporter 2 photos.", "Il faut apporter deux photos."),
+        ],
+    )
+    def test_rejects_words_the_correction_removed(self, nlp, original, corrected):
+        result = validate_no_lost_content_words(nlp(original), nlp(corrected))
+        assert not result.passed
+        assert "lost words" in result.reason
+
+    @pytest.mark.parametrize(
+        "original, corrected",
+        [
+            ("Je sui aller au supermarchet.", "Je suis allé au supermarché."),
+            # Phonetic writing, four edits from the word and still the same word.
+            ("koman tu va ? jai pa compri ce ke tu a di.",
+             "Comment tu vas ? J'ai pas compris ce que tu as dit."),
+            ("Je voudré un otomobil rouj.", "Je voudrais une automobile rouge."),
+            # Re-segmentation and elision, in both directions.
+            ("Il mange unepomme.", "Il mange une pomme."),
+            ("jai faim et cest tard.", "J'ai faim et c'est tard."),
+            # Removing a duplication is a correction (C6), not a loss.
+            ("Elle habite une maison maison.", "Elle habite une maison."),
+            ("Le khat dort.", "Le chat dort."),
+            # Conjugation fixes, from tests/test_llm_mistral.py's paragraph. Too far for an
+            # edit budget; the stem, or the output's lemma, is what shows the same verb.
+            ("On a prandue un cour de fransé.", "On a pris un cours de français."),
+            ("Je peu recomancé et prand mon temp.", "Je peux recommencer et prendre mon temps."),
+            ("Mé camarade finisse plu vit.", "Mes camarades finissaient plus vite."),
+        ],
+    )
+    def test_accepts_corrections(self, nlp, original, corrected):
+        result = validate_no_lost_content_words(nlp(original), nlp(corrected))
+        assert result.passed, result.reason
+
+
 class TestShouldAcceptCorrection:
     """The orchestrator, which is what the improvers actually call."""
 
@@ -194,6 +261,7 @@ class TestShouldAcceptCorrection:
             ("Je vais au marche.", "Je vais au marche a Marseille."),
             ("Il flurbait hier.", "Il zorglubait hier."),
             ("Le chat dort.", "Le petit animal se repose tranquillement sur le canape."),
+            ("Je sui aller au magasin.", "Je suis au magasin."),
         ],
     )
     def test_rejects_inventions(self, nlp, original, corrected):

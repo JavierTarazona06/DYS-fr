@@ -93,6 +93,12 @@ specify that a failed LLM pass falls back to the **LanguageTool output**. Both i
 fall back to the masked *input*, discarding the LT pre-pass corrections that were already
 validated. The user gets less than the light mode would have produced.
 
+**Measured 2026-09-17.** The same input-not-LT-output fallback applies when the final gate
+refuses an LLM output, and that is not rare: of 39 hybrid outputs (8 probe sentences, the 30
+corpus texts and the `test_mistral_dyslexic_paragraph` text), the gate refused 15. Every one
+came back to the user exactly as they typed it. TODO-14 made the gate stricter, so this
+fallback now matters more.
+
 Affects rules D2 and C9, and contradiction I-6.
 
 ### TODO-7 · Local-LLM resource settings ignore the project's own analysis — **Low**
@@ -147,29 +153,6 @@ and is still wrong ("rendons").
 The inline comment says `# Limit to top 5 errors`; the expression is
 `max(5, len(matches) * 0.1)`, which exceeds 5 on any text with more than 50 matches.
 Affects rule D4. Contributing cause of TODO-1.
-
-### TODO-14 · Hybrid mode can delete words, and nothing checks for it — **High**
-
-`src/guardrails/policy.py:133` (`should_accept_correction`)
-
-```
-IN : Je sui aller au magasin.
-OUT: Je suis au magasin.
-```
-
-`tests/test_llm_mistral.py:176` (`test_mistral_no_hallucination`) fails on this. The verb is
-gone and the sentence now says something else. Every guard in `policy.py` looks for what the
-output **adds** — entities, numbers, proper nouns, new tokens, neologisms. A deletion passes
-all of them, and the LanguageTool degradation check accepts it too, since the shorter
-sentence has fewer errors.
-
-The no-additions policy is the product's central commitment, but its purpose is "no change
-of meaning", and removal changes meaning as surely as insertion. Needs a symmetric check:
-the input's content words (nouns, verbs, adjectives, adverbs) must survive into the output,
-allowing for spelling correction with the same edit tolerance the novelty guard uses.
-
-Affects rules A1, A13 and H12. Light mode is not affected: LanguageTool replacements do not
-drop words.
 
 ### TODO-15 · Homophone "corrections" that change the grammatical role — **Medium**
 
@@ -563,3 +546,65 @@ for the better: "depuis" 6 times, "douze" 3, "dans" 3, "montré" 2, and "l'écol
 "tante" and "préfère" once each. None changed for the worse. Adversarial checks pass on all
 three corpora. Seed 42 sits below target before and after; that is TODO-20, not a
 regression. 17 unit tests added.
+
+### TODO-14 · Hybrid mode can delete words, and nothing checks for it — **High**
+
+Found by the reinstall test of 2026-09-17.
+
+`src/guardrails/policy.py` (`should_accept_correction`)
+
+```
+IN : Je sui aller au magasin.
+OUT: Je suis au magasin.
+```
+
+`tests/test_llm_mistral.py` (`test_mistral_no_hallucination`) failed on this. The verb was
+gone and the sentence said something else. Every guard in `policy.py` looked for what the
+output **adds** — entities, numbers, proper nouns, new tokens, neologisms. A deletion passed
+all of them, and the LanguageTool degradation check accepted it too, since the shorter
+sentence had fewer errors.
+
+Affects rules A1, A12, A13 and H12.
+
+**Fixed 2026-09-17** by `validate_no_lost_content_words`, the counterpart of the novelty
+ratio, in the final gate and therefore in all three improvers. It lives in
+`src/guardrails/preservation.py`. A content word the user wrote must still be recognisable in
+the stretch of output that replaced it, by one of:
+
+- **spelling**, within the usual edit budget, including merges and splits ("jai" -> "j'ai");
+- **sound**, through the new `sound_key` in `src/utils/text.py`, because phonetic writing is
+  four edits from its word ("koman" -> "comment");
+- **stem**, against the output word or its lemma, because a conjugation fix rewrites the end
+  of a verb ("finisse" -> "finissaient", "prandue" -> "pris").
+
+Measured against every correction collected today:
+
+| Engine | Outputs | Refused before | Refused after |
+|---|---|---|---|
+| Light mode (3 corpora + probes) | 109 | 0 | **0** |
+| Hybrid mode (8 probes, 30 corpus texts, the paragraph test) | 39 | 10 | **15** |
+
+The five newly refused hybrid outputs all changed what the user wrote, and all had reached
+the user before:
+
+- "Je sui aller au magasin" -> "Je suis au magasin" (the verb dropped)
+- "et souven complet" -> "est complet" (the adverb dropped)
+- "qu'il fallait dormir" -> "que je dois dormir" (paraphrased)
+- "tout le quartié" -> "tout le monde" (substituted)
+- "Nuos lui rendon visite" -> "Elle est rendue visite chaque ete par Nuos", with
+  "grand-mere" -> "mere" (rewritten)
+
+It also independently refuses five that other guards already caught: "mars" -> "avril",
+digits spelled out as words, and the entity marker for "Marie" coming back as
+"L'entité PER". Light-mode QA is unchanged: H3 0, H4 87.1%. `tests/test_llm_mistral.py`
+passes 6/6 for the first time today.
+
+Two wrong turns, both caught by data rather than review. The first version took its edit
+budget from the longer word, so "sui" and "aller" joined sounded close enough to "suis" —
+it missed the very deletion it was built for. The second had no stem matching and refused
+`test_mistral_dyslexic_paragraph`, whose output fixes conjugations throughout.
+
+Known limits: a substitution that shares a stem with the user's word passes ("quartier" ->
+"quartz"), a tense change that keeps the verb recognisable passes, and reordering is not
+checked. And `test_mistral_no_hallucination` now passes because the refused output returns
+the user's text uncorrected, not because hybrid mode corrected it (TODO-6). 25 tests added.

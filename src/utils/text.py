@@ -7,6 +7,7 @@ sit outside it.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 
 
@@ -21,6 +22,51 @@ def normalise_for_comparison(text: str) -> str:
     Collapses elisions, hyphens and spacing, so "J'ai", "jai" and "j ai" compare equal.
     """
     return "".join(ch for ch in strip_accents(text.lower()) if ch.isalnum())
+
+
+#: Ordered rewrites from French spelling to a rough sound key. Later rules see the output
+#: of earlier ones, so the order matters: "ch" must reach the "h" rule already as "kh".
+_SOUND_RULES = [
+    (re.compile(r"eau|au"), "o"),
+    (re.compile(r"ph"), "f"),
+    (re.compile(r"qu|ck|q"), "k"),
+    (re.compile(r"c(?=[eiy])"), "s"),
+    (re.compile(r"c"), "k"),
+    (re.compile(r"g(?=[eiy])"), "j"),
+    (re.compile(r"gu(?=[eiy])"), "g"),
+    (re.compile(r"th"), "t"),
+    (re.compile(r"(?<!c|s)h"), ""),
+    (re.compile(r"oi"), "wa"),
+    (re.compile(r"ou"), "u"),
+    (re.compile(r"ai|ei"), "e"),
+    (re.compile(r"(?:en|an|em|am)(?![aeiouy])"), "A"),
+    (re.compile(r"(?:on|om)(?![aeiouy])"), "O"),
+    (re.compile(r"(?:ain|ein|in|im|un)(?![aeiouy])"), "I"),
+    (re.compile(r"y"), "i"),
+    (re.compile(r"(?:er|ez|et)$"), "e"),
+    (re.compile(r"([a-z])\1"), r"\1"),
+    (re.compile(r"(?<=[aeiou])s(?=[aeiou])"), "z"),
+]
+_SILENT_ENDING = re.compile(r"[estdxzp]+$")
+
+
+def sound_key(word: str) -> str:
+    """A rough key for how a French word sounds, so phonetic spellings match their word.
+
+    Dyslexic writing is largely phonetic: "kom" for "comme", "koman" for "comment",
+    "otomobil" for "automobile". Those are four edits apart in spelling and next to nothing
+    apart in sound, and a guard that compares spelling alone mistakes their correction for a
+    different word.
+
+    Deliberately rough — a few ordered rules, not a phonetisation. It only has to bring a
+    phonetic misspelling within an edit or two of its correction; it is never used to decide
+    what a word *is*. Digits and punctuation drop out, so a number has an empty key.
+    """
+    w = strip_accents(word.lower().replace("ç", "s"))
+    w = "".join(ch for ch in w if "a" <= ch <= "z")
+    for pattern, replacement in _SOUND_RULES:
+        w = pattern.sub(replacement, w)
+    return _SILENT_ENDING.sub("", w) or w
 
 
 def edit_budget(text: str) -> int:

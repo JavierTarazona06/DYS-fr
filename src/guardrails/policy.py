@@ -22,6 +22,7 @@ from src.guardrails.novelty import (
     novelty_ratio,
 )
 from src.guardrails.numbers_date import new_dates_in_docs, new_numbers_and_dates
+from src.guardrails.preservation import lost_content_words
 from src.utils.text import resembles_any
 
 
@@ -122,6 +123,18 @@ def validate_no_neologisms(original_doc, corrected_doc) -> ValidationResult:
     return ValidationResult(True)
 
 
+def validate_no_lost_content_words(original_doc, corrected_doc) -> ValidationResult:
+    """Rules A1, A12, A13: no content word the user wrote may be dropped or swapped out.
+
+    Every validator above looks for what a correction adds; a deletion passes all of them.
+    See `src/guardrails/preservation.py` and TODO-14.
+    """
+    lost = lost_content_words(original_doc, corrected_doc)
+    if lost:
+        return ValidationResult(False, f"lost words: {lost}")
+    return ValidationResult(True)
+
+
 def validate_no_new_dates_in_docs(original_doc, corrected_doc) -> ValidationResult:
     """Rule A3, the spaCy half: DATE entities the regexes cannot see."""
     added = new_dates_in_docs(original_doc, corrected_doc)
@@ -158,6 +171,7 @@ def should_accept_correction(
         validate_no_new_dates_in_docs(original_doc, corrected_doc),
         validate_no_neologisms(original_doc, corrected_doc),
         validate_novelty_ratio(original_doc, corrected_doc, threshold),
+        validate_no_lost_content_words(original_doc, corrected_doc),
     ):
         if not check.passed:
             return check
