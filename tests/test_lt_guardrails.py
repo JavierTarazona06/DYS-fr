@@ -14,6 +14,7 @@ import pytest
 
 from src.improvers.lt_improver import (
     _BLOCK_RULES,
+    _debug_filter_enabled,
     _does_not_add_digits,
     _does_not_insert_words,
     _does_not_introduce_proper_noun,
@@ -173,3 +174,18 @@ class TestExistingGuardsStillHold:
         # actually rejects it, which is why both guards run.
         assert _token_delta_ok("fiat", "est fiat", 1) is True
         assert _token_delta_ok("fiat", "il est fiat", 1) is False
+
+
+class TestFilterTraceIsOptIn:
+    """TODO-12: the trace quotes the user's text, and the frozen build logs stdout to disk."""
+
+    def test_off_when_unset(self):
+        assert _debug_filter_enabled({}) is False
+
+    @pytest.mark.parametrize("value", ["0", "false", "no", "off", ""])
+    def test_off_when_disabled(self, value):
+        assert _debug_filter_enabled({"LT_DEBUG_FILTER": value}) is False
+
+    @pytest.mark.parametrize("value", ["1", "true", "YES", "on"])
+    def test_developers_can_still_turn_it_on(self, value):
+        assert _debug_filter_enabled({"LT_DEBUG_FILTER": value}) is True

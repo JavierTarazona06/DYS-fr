@@ -24,7 +24,19 @@ _BLOCK_RULES = {
     # silently completes it. See TODO-10.
     "DOUBLE_PUNCTUATION",
 }
-_DEBUG_FILTER = os.getenv("LT_DEBUG_FILTER", "1").lower() in {"1", "true", "yes", "on"} # Debug flag
+
+def _debug_filter_enabled(environ=os.environ) -> bool:
+    """Whether to trace every filtering decision. Opt-in, and it must stay that way.
+
+    The trace quotes the user's own words (``orig``, ``repl``, LanguageTool's message). The
+    frozen build redirects stdout into ``%LOCALAPPDATA%\\DYS-fr\\logs``, so an on-by-default
+    trace wrote the user's text to disk on every correction (TODO-12).
+    Set ``LT_DEBUG_FILTER=1`` to see it while developing.
+    """
+    return environ.get("LT_DEBUG_FILTER", "0").lower() in {"1", "true", "yes", "on"}
+
+
+_DEBUG_FILTER = _debug_filter_enabled()
 
 _digits_re = re.compile(r"\d")
 

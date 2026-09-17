@@ -141,27 +141,6 @@ The inline comment says `# Limit to top 5 errors`; the expression is
 `max(5, len(matches) * 0.1)`, which exceeds 5 on any text with more than 50 matches.
 Affects rule D4. Contributing cause of TODO-1.
 
-### TODO-12 · The user's text is written to the log file by default — **High**
-
-`src/improvers/lt_improver.py:27`
-
-```python
-_DEBUG_FILTER = os.getenv("LT_DEBUG_FILTER", "1").lower() in {...}
-```
-
-The filter trace defaults to **on**. In the frozen build `print()` is redirected into
-`%LOCALAPPDATA%\DYS-fr\logs\dys-fr.log` (`src/utils/logging_setup.py`), so every correction
-writes fragments of what the user typed to disk: `orig='jai' repl="j'ai"`, LanguageTool's
-messages quoting the user's words, and `rejected_result reason=...`, which lists the words
-a guardrail refused. One correction in the installed app produced 54 such lines.
-
-The sidebar tells the user their sensitive data is protected, and the product exists for
-people correcting personal writing. Nothing leaves the machine, so F1 still holds, but a
-plain-text copy of the user's text persisting in a log they do not know about is exactly
-what that promise rules out. `languagetool.log` is clean: it records character counts only.
-
-Rule D5 describes this trace as an opt-in toggle; the code made it opt-out.
-
 ### TODO-13 · "depui" becomes "d'appui" in light mode — **High**
 
 `src/improvers/lt_improver.py:195` (`_first_replacement`) and `:87`
@@ -457,3 +436,37 @@ id rather than by category: PUNCTUATION as a whole carries useful fixes and only
 is harmful.
 
 Affects rules B1, H15, and client acceptance.
+
+### TODO-12 · The user's text is written to the log file by default — **High**
+
+Found by the reinstall test of 2026-09-17.
+
+`src/improvers/lt_improver.py:27`
+
+```python
+_DEBUG_FILTER = os.getenv("LT_DEBUG_FILTER", "1").lower() in {...}
+```
+
+The filter trace defaulted to **on**. In the frozen build `print()` is redirected into
+`%LOCALAPPDATA%\DYS-fr\logs\dys-fr.log` (`src/utils/logging_setup.py`), so every correction
+wrote fragments of what the user typed to disk: `orig='jai' repl="j'ai"`, LanguageTool's
+messages quoting the user's words, and `rejected_result reason=...`, which lists the words
+a guardrail refused. One correction in the installed app produced 54 such lines.
+
+The sidebar tells the user their sensitive data is protected, and the product exists for
+people correcting personal writing. Nothing left the machine, so F1 held, but a plain-text
+copy of the user's text persisting in a log they do not know about is exactly what that
+promise rules out. `languagetool.log` is clean: it records character counts only.
+
+Affects rule D5, which describes the trace as an opt-in toggle.
+
+**Fixed 2026-09-17**: the trace is now opt-in. `_debug_filter_enabled` defaults to off and
+`LT_DEBUG_FILTER=1` still turns it on for development; tested in
+`tests/test_lt_guardrails.py`. Verified end to end: correcting four texts through the real
+engine with the variable unset prints nothing. The hybrid improvers were already clean —
+their text-bearing output sits behind `debug=`, which `app.py` never sets.
+
+Two things the fix does not reach. The 0.1.0 installer built on 2026-09-17 predates it, so
+rebuild before shipping. And logs already written on a machine keep their text until the
+rotating handler overwrites them (2 MB × 4) or the app is uninstalled, which always deletes
+`logs\`.
