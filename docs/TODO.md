@@ -7,7 +7,8 @@ note of how.
 [completion-plan.md](completion-plan.md) schedules this queue: the decisions below were
 Phase 0; TODO-2 is Phase 2; TODO-4 to TODO-8 and TODO-11 are Phase 4.
 TODO-9 and TODO-10 were fixed on 2026-09-08. TODO-12 to TODO-17 were found by the full
-reinstall test of 2026-09-17, and TODO-18 to TODO-20 while fixing TODO-13 the same day.
+reinstall test of 2026-09-17, TODO-18 to TODO-20 while fixing TODO-13 the same day, and
+TODO-21 while fixing TODO-14.
 
 Five sections:
 
@@ -257,6 +258,34 @@ taxonomy. Either run the gate over several seeds and report the spread, or state
 as holding on the fixed corpus only. Worth knowing before quoting the number to the client.
 
 Affects rule H4.
+
+### TODO-21 · The novelty ratio refuses corrections of phonetic writing — **Medium**
+
+`src/guardrails/novelty.py` (`new_content_lemmas`)
+
+Found while fixing TODO-14, in the hybrid outputs collected to measure it. The gate refuses
+corrections of exactly the writing hybrid mode exists for, and names the corrected word as
+the invention:
+
+| Input | LLM output | Refused as |
+|---|---|---|
+| koman tu va ? jai pa compri ce ke tu a di. | Comment tu vas ? J'ai pas compris ce que tu as dit. | novelty 20%: `comment` |
+| Il fo ke je parte o travail kom tou les jour. | Il faut que je parte au travail kom tou le jour. | novelty 16.7%: `falloir` |
+| Je voudré un otomobil rouj pour mon aniversère. | Je voudrais une automobile rouge pour mon anniversaire. | novelty 50%: `vouloir`, `automobile` |
+
+The first and third are faithful. The second is not ("les jour" became "le jour") but was
+refused for "faut", which is right.
+
+The novelty guard recognises a corrected word only by spelling distance, and "koman" ->
+"comment" is four edits. On short texts one such word is enough to cross 12%. The user gets
+their text back uncorrected (TODO-6).
+
+TODO-14 built the missing tolerance: `sound_key` in `src/utils/text.py`, and stem matching in
+`src/guardrails/preservation.py`. The lost-words check already accepts all three pairs. Reusing
+it in `new_content_lemmas` is the obvious fix; measure it against the collected hybrid outputs
+in both directions, since the same tolerance could let a genuinely new word through.
+
+Affects rules A8, A9 and hybrid mode's usefulness.
 
 ---
 
