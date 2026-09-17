@@ -8,7 +8,7 @@ note of how.
 Phase 0; TODO-2 is Phase 2; TODO-4 to TODO-8 and TODO-11 are Phase 4.
 TODO-9 and TODO-10 were fixed on 2026-09-08. TODO-12 to TODO-17 were found by the full
 reinstall test of 2026-09-17, TODO-18 to TODO-20 while fixing TODO-13 the same day, and
-TODO-21 while fixing TODO-14.
+TODO-21 while fixing TODO-14. TODO-6 and TODO-21 were fixed together the same evening.
 
 Five sections:
 
@@ -109,23 +109,6 @@ unresponsive Ollama daemon blocks the Streamlit thread with no bound.
 
 Affects rule G6.
 
-### TODO-6 · Degradation reverts to the wrong target — **Medium**
-
-`src/improvers/llm_improver.py:275`, `src/improvers/ollama_improver.py:95`
-
-`docs/archive/Conception French Version.md:78` and the client deliverable (`.tex:92`)
-specify that a failed LLM pass falls back to the **LanguageTool output**. Both improvers
-fall back to the masked *input*, discarding the LT pre-pass corrections that were already
-validated. The user gets less than the light mode would have produced.
-
-**Measured 2026-09-17.** The same input-not-LT-output fallback applies when the final gate
-refuses an LLM output, and that is not rare: of 39 hybrid outputs (8 probe sentences, the 30
-corpus texts and the `test_mistral_dyslexic_paragraph` text), the gate refused 15. Every one
-came back to the user exactly as they typed it. TODO-14 made the gate stricter, so this
-fallback now matters more.
-
-Affects rules D2 and C9, and contradiction I-6.
-
 ### TODO-7 · Local-LLM resource settings ignore the project's own analysis — **Low**
 
 `src/improvers/llm_improver.py:57,59` and `config.yaml:26`
@@ -170,6 +153,11 @@ remaining half is a hyphen split, "commen" -> "nommes-en", the same shape as TOD
 hyphen instead of an apostrophe. Extending that guard to hyphens is the obvious next step,
 but not a sufficient one: in `t20`, "rendon" -> "rend-on" keeps the user's letters exactly
 and is still wrong ("rendons").
+
+**More exposed since TODO-6** (2026-09-17): hybrid mode now falls back to light mode's
+correction instead of the input, so this defect reaches hybrid users too. Measured example,
+where the LLM output was refused and light mode's came back instead:
+"Il m'a di ki vien demin a la maison." -> "Il m'a de ki vas-en de min à la maison."
 
 ### TODO-8 · Misleading comment on the hint cap — **Low**
 
@@ -644,6 +632,45 @@ the user's text uncorrected, not because hybrid mode corrected it (TODO-6). 25 t
 **Verified in the installed app** the same afternoon, in hybrid mode with Mistral: "Je sui
 aller au magasin." came back unchanged instead of losing its verb, and the dyslexic paragraph
 was still corrected, conjugation fixes included.
+
+Later that day TODO-6 changed what a refusal returns: the same sentence now comes back as
+light mode corrects it, "Je suis allé au magasin."
+
+### TODO-6 · Degradation reverts to the wrong target — **Medium**
+
+`src/improvers/llm_improver.py`, `src/improvers/ollama_improver.py`
+
+`docs/archive/Conception French Version.md:78` and the client deliverable (`.tex:92`)
+specify that a failed LLM pass falls back to the **LanguageTool output**. Both improvers fell
+back to the input instead — on an error increase, on a model error, and on a final-gate
+refusal. The user got less than light mode would have produced.
+
+It mattered more than its Medium rating suggested. Measured on 38 inputs (8 probe sentences
+and the 30 corpus texts) with the gate as of TODO-14, hybrid mode handed back **14 of the 33
+texts that had errors exactly as the user typed them**.
+
+Affects rules D2 and C9, and contradiction I-6.
+
+**Fixed 2026-09-17.** All three paths in both improvers now return `_fallback(text)`, light
+mode's correction of what the user wrote. One thing the entry above had wrong: the hybrid
+"LT pre-pass" never applied a correction — it only collects hints for the prompt — so there
+was no LanguageTool output to fall back to. The fallback runs the light improver in full,
+with its per-replacement guards and its own final gate, sharing the hybrid improver's client.
+
+Measured end to end with Mistral on the same 38 inputs, together with TODO-21:
+
+| | Before (HEAD `8362ed2`) | After |
+|---|---|---|
+| Texts with errors returned uncorrected | 14 of 33 | **0 of 33** |
+| LanguageTool errors left, of 121 | 62 | **15** |
+| Outputs that used the fallback | — | 12 |
+
+The error count flatters the fallback, since LanguageTool does not flag its own output. Read
+by hand, the 12 fallback texts are exactly light mode's corrections, good and bad: "Je sui
+aller au magasin." -> "Je suis allé au magasin." and "duoze" -> "douze", but also light
+mode's known defects, now reaching hybrid users — "ki vien demin" -> "ki vas-en de min"
+(TODO-11), "a khange" -> "à changé" (TODO-15), "l'avon" -> "l'Avon" (TODO-19). That is the
+specified behaviour; making light mode better is those entries' work. 10 tests added.
 
 ### TODO-21 · The novelty ratio refuses corrections of phonetic writing — **Medium**
 

@@ -5,6 +5,7 @@ from src.guardrails.entities import mask_entities, reinject_entities
 from src.guardrails.policy import should_accept_correction
 from .base import TextImprover
 from .lt_client import LTClient
+from .lt_improver import LTImprover
 
 class OllamaImprover(TextImprover):
     """
@@ -22,6 +23,8 @@ class OllamaImprover(TextImprover):
         self.model_name = model_name
         self.nlp = nlp
         self.lt_client = LTClient(lang, lt_server_url)
+        # What the user gets when the LLM pass fails (TODO-6). Shares the client.
+        self._light = LTImprover(lang, lt_server_url, nlp=nlp, client=self.lt_client)
         self.temperature = temperature
 
     def _build_system_prompt(self) -> str:
@@ -55,6 +58,10 @@ class OllamaImprover(TextImprover):
     def _count_lt_errors(self, text: str) -> int:
         return len(self.lt_client.check(text))
 
+    def _fallback(self, text: str) -> str:
+        """Light mode's correction of `text`; see `LLMImprover._fallback` and TODO-6."""
+        return self._light.improve(text)
+
     def improve(self, text: str, debug: bool = False) -> str:
         # 1. Mask Entities
         masked = []
@@ -86,16 +93,15 @@ class OllamaImprover(TextImprover):
             
         except Exception as e:
             if debug: print(f"Ollama Error: {e}")
-            return text  # Fallback on error
+            return self._fallback(text)
 
         # 4. Post-Validation
         errors_after = self._count_lt_errors(corrected_text)
-        
-        # If model hallucinated and made it worse, revert
+
+        # If model hallucinated and made it worse, fall back to light mode
         if errors_after > errors_before:
-            final_text = text_to_check 
-        else:
-            final_text = corrected_text
+            return self._fallback(text)
+        final_text = corrected_text
 
         # 5. Reinject Entities
         if masked:
@@ -107,6 +113,6 @@ class OllamaImprover(TextImprover):
             if not verdict.passed:
                 if debug:
                     print(f"Rejected by guardrails: {verdict.reason}")
-                return text
+                return self._fallback(text)
 
         return final_text

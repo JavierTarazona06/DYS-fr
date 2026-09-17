@@ -269,10 +269,12 @@ class LTImprover(TextImprover):
         nlp: Language | None = None, # Spacy NLP pipeline for entity masking
         lt_config: dict | None = None, # Client-side LT config (if any)
         passes: int = 2, # Number of improvement passes
+        client: LTClient | None = None, # Reuse a caller's client; the caller then owns it
     ):
         # Pass lt_config if you intend to use it for *other* client-side LanguageTool configs
         # For 'level=picky', we are relying on the server startup args in runner.py
-        self.client = LTClient(lang, server_url, config=lt_config)
+        self._owns_client = client is None
+        self.client = client if client is not None else LTClient(lang, server_url, config=lt_config)
         self.nlp = nlp
         self.passes = max(1, passes)
 
@@ -338,4 +340,5 @@ class LTImprover(TextImprover):
         return out
 
     def close(self):
-        self.client.close()
+        if self._owns_client:
+            self.client.close()

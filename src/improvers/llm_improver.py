@@ -9,6 +9,7 @@ from src.guardrails.entities import mask_entities, reinject_entities
 from src.guardrails.policy import should_accept_correction
 from .base import TextImprover
 from .lt_client import LTClient
+from .lt_improver import LTImprover
 
 
 class LLMImprover(TextImprover):
@@ -48,9 +49,11 @@ class LLMImprover(TextImprover):
         else:
             self.lt_client = LTClient(lang, lt_server_url)
             self._owns_lt_client = True
+        # What the user gets when the LLM pass fails (TODO-6). Shares the client.
+        self._light = LTImprover(lang, lt_server_url, nlp=nlp, client=self.lt_client)
         self.max_tokens = max_tokens
         self.temperature = temperature
-        
+
         # Load LLM with CPU-optimized settings
         self.llm = Llama(
             model_path=model_path,
@@ -165,7 +168,20 @@ Texte corrigé (UNIQUEMENT le texte corrigé) :
         """Count errors detected by LanguageTool."""
         matches = self.lt_client.check(text)
         return len(matches)
-    
+
+    def _fallback(self, text: str) -> str:
+        """Light mode's correction of `text`, for when the LLM pass cannot be used.
+
+        The specification (rules D2 and C9, decision I-6) degrades to the LanguageTool
+        output. This returned the input instead, discarding corrections light mode would
+        have made — and the final gate refuses about a third of LLM outputs, so hybrid mode
+        handed back uncorrected text more often than it corrected it (TODO-6).
+
+        The pre-pass above only collects hints; nothing applies them. So the fallback runs
+        the light improver in full, with its own per-replacement guards and final gate.
+        """
+        return self._light.improve(text)
+
     def improve(self, text: str, debug: bool = False) -> str:
         """
         Hybrid pipeline:
@@ -248,8 +264,7 @@ Texte corrigé (UNIQUEMENT le texte corrigé) :
                 print(f"Respuesta LLM:\n{llm_output}\n")
         except Exception as e:
             print(f"[LLM_ERROR] {e}")
-            # Fallback: return original text
-            return reinject_entities(text_to_check, masked) if masked else text
+            return self._fallback(text)
         
         # Step 4: Post-validation
         if debug:
@@ -274,12 +289,12 @@ Texte corrigé (UNIQUEMENT le texte corrigé) :
             if debug:
                 print(f"⚠️  REVERTIDO (empeoró la calidad)")
             else:
-                print(f"[LLM_DEGRADED] Errors increased ({error_count_before} → {error_count_after}), reverting to input")
-            final_text = text_to_check
-        else:
-            if debug:
-                print(f"✓ ACEPTADO (mejoró o mantuvo calidad)")
-            final_text = llm_output
+                print(f"[LLM_DEGRADED] Errors increased ({error_count_before} → {error_count_after}), falling back to LanguageTool")
+            return self._fallback(text)
+
+        if debug:
+            print(f"✓ ACEPTADO (mejoró o mantuvo calidad)")
+        final_text = llm_output
         
         if debug:
             print()
@@ -307,7 +322,7 @@ Texte corrigé (UNIQUEMENT le texte corrigé) :
             if not verdict.passed:
                 if debug:
                     print(f"REJETÉ par les garde-fous: {verdict.reason}")
-                return text
+                return self._fallback(text)
 
         return final_text
     
