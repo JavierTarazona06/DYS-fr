@@ -21,7 +21,31 @@ Five sections:
    [business-rules.md](business-rules.md) remains the inventory.
 5. **Decisions** — the archived documents contradicted each other; all are now taken.
 
-## Last full verification — 2026-09-17
+## Verification runs
+
+### 2026-09-17, afternoon — after TODO-12, TODO-13 and TODO-14 (latest)
+
+Rebuilt the installer from `557d808`, uninstalled the morning build with `/KEEPDATA`,
+reinstalled, and exercised each fix in the installed app.
+
+| Check | Result |
+|---|---|
+| `build.ps1 -Channel installer -IncludeAiRuntime -FastCompression` | Pass. 572 MB in 5 min, unsigned, SHA-256 `9988F1D6DFD9D361D1C71D3EA634584261B6893C5D85B04B95155FEC537BD3C6` |
+| `unins000.exe /VERYSILENT /KEEPDATA` | Pass. Install dir and registry entry removed; `models` kept |
+| `DYS-fr-Setup-0.1.0.exe /VERYSILENT` | Pass. Exit 0 in 69 s; installed `DYS-fr-runtime.exe` identical to the build's |
+| `packaging/windows/smoke_test.py` | Pass. UI 2.7 s, LanguageTool 3.3 s, install dir unchanged |
+| `pytest tests/ --ignore=tests/test_llm_mistral.py` | Pass. 245 passed |
+| `pytest tests/test_llm_mistral.py` | Pass. 6/6 |
+| TODO-13, light mode: "Il habite ici depui longtemps. Marie habite a Lyon depui 2019 et jai faim." | "Il habite ici depuis longtemps. Marie habite à Lyon depuis 2019 et j'ai faim." |
+| TODO-14, hybrid mode: "Je sui aller au magasin." | Returned unchanged; the morning build returned "Je suis au magasin." |
+| TODO-14, hybrid mode: the `test_mistral_dyslexic_paragraph` text | Corrected, conjugation fixes kept ("pris", "prendre", "finissaient"), "Toma" preserved |
+| TODO-12: `dys-fr.log` after those four corrections | Startup lines only: no `LT_FILTER` line and none of the user's words |
+
+For hybrid mode the Mistral GGUF was copied from `resources/models` into
+`%LOCALAPPDATA%\DYS-fr\models`, where the in-app download would put it. The download itself
+was not exercised; it stays in REL-4.
+
+### 2026-09-17, morning — before the fixes
 
 Rebuilt the installer from `784507d`, uninstalled the 2026-09-08 build, reinstalled.
 
@@ -319,8 +343,9 @@ TODO-13 on 2026-09-17.
 
 ## Release and delivery
 
-- **REL-1 · Nothing is pushed or merged.** `feature/windows-distribution-final-touches` is
-  8 commits ahead of its remote and 81 ahead of `main`, with no pull request.
+- **REL-1 · Nothing is pushed or merged.** The remote copy of
+  `feature/windows-distribution-final-touches` stops at `bd7d221`; every commit since, including
+  all of 2026-09-17's fixes, exists only locally. There is no pull request against `main`.
 - **REL-2 · The installer is unsigned.** SmartScreen will warn every client. Blocked on two
   facts only the project owners have — whether there is a legal entity, and whether the
   delivery is commercial. Options and costs:
@@ -517,10 +542,13 @@ Affects rule D5, which describes the trace as an opt-in toggle.
 engine with the variable unset prints nothing. The hybrid improvers were already clean —
 their text-bearing output sits behind `debug=`, which `app.py` never sets.
 
-Two things the fix does not reach. The 0.1.0 installer built on 2026-09-17 predates it, so
-rebuild before shipping. And logs already written on a machine keep their text until the
+**Verified in the installed app** the same afternoon, from a rebuilt installer: four
+corrections in light and hybrid mode left no trace line and none of the user's words in the
+log (see [Verification runs](#verification-runs)).
+
+One thing the fix does not reach: logs already written on a machine keep their text until the
 rotating handler overwrites them (2 MB × 4) or the app is uninstalled, which always deletes
-`logs\`.
+`logs\`. Any installer built before `20c6445` still has the defect.
 
 ### TODO-13 · "depui" becomes "d'appui" in light mode — **High**
 
@@ -575,6 +603,9 @@ for the better: "depuis" 6 times, "douze" 3, "dans" 3, "montré" 2, and "l'écol
 "tante" and "préfère" once each. None changed for the worse. Adversarial checks pass on all
 three corpora. Seed 42 sits below target before and after; that is TODO-20, not a
 regression. 17 unit tests added.
+
+**Verified in the installed app** the same afternoon: "depui" came back as "depuis", and
+"jai" still became "j'ai".
 
 ### TODO-14 · Hybrid mode can delete words, and nothing checks for it — **High**
 
@@ -637,3 +668,7 @@ Known limits: a substitution that shares a stem with the user's word passes ("qu
 "quartz"), a tense change that keeps the verb recognisable passes, and reordering is not
 checked. And `test_mistral_no_hallucination` now passes because the refused output returns
 the user's text uncorrected, not because hybrid mode corrected it (TODO-6). 25 tests added.
+
+**Verified in the installed app** the same afternoon, in hybrid mode with Mistral: "Je sui
+aller au magasin." came back unchanged instead of losing its verb, and the dyslexic paragraph
+was still corrected, conjugation fixes included.
