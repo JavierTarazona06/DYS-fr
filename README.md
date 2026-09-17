@@ -10,20 +10,20 @@ This project delivers an offline text correction and simplification tool designe
 
 # Key features:
 
-- Accessible UI (Streamlit): 🚧 dyslexia-friendly fonts (Lexend, Atkinson Hyperlegible, OpenDyslexic), 🚧 adjustable font size, 🚧 line spacing, 🚧 high-contrast mode, and 🚧 distraction-free focus mode.
+- Accessible UI (Streamlit): adjustable font size, line spacing and a distraction-free focus mode, saved per user; 🚧 dyslexia-friendly fonts (Lexend, Atkinson Hyperlegible, OpenDyslexic) and 🚧 high-contrast mode.
 
-- Correction engine (DYS-safe): based on LanguageTool, with filters (“guardrails”) intended to ensure no new information (dates, numbers, names, entities) is added. Entity protection is in place; 🚧 the remaining validation layer is not yet wired in. Only safe corrections are applied (orthography, accents, punctuation, 🚧 splitting long sentences). Hunspell is listed in the design documents but is not part of the current engine.
+- Correction engine (DYS-safe): based on LanguageTool, with an optional local LLM (hybrid mode). Every correction passes a final set of checks ("guardrails") before it reaches the user: no new entities, proper nouns, numbers or dates, no invented words, no word the user wrote dropped or swapped, and at most 12% new content words. If a hybrid-mode rewrite fails them, the user gets the rule-based correction instead. Only safe corrections are applied (orthography, accents, punctuation, word segmentation; 🚧 splitting long sentences). Hunspell is listed in the design documents but is not part of the current engine.
 
-- Quality assurance: 🚧 curated test sets with simulated dyslexic errors and metrics on error reduction (≥80%), sentence length and readability. Validation with end users is a separate, non-engineering task.
+- Quality assurance: a corpus of 30 French texts with simulated dyslexic errors, measuring illegal additions, error reduction, sentence length and readability on every run. In light mode it currently records 0 illegal additions and an 87% error reduction on the fixed corpus; readability does not yet improve, since that needs sentence splitting. Validation with end users is a separate, non-engineering task.
 
 - Packaged for Windows: fully offline with embedded Java Runtime, LanguageTool and spaCy. Distributed via PyInstaller + Inno Setup installer.
 
-- Safe by design: a strict “no-additions” policy (no invented connectors, entities, or paraphrases) is the product's central commitment. 🚧 It is currently enforced only by entity masking; the full guardrail layer is the next milestone.
+- Safe by design: a strict “no-additions” policy (no invented connectors, entities, or paraphrases) is the product's central commitment, enforced by the guardrails above in both modes. Where a rule can only be approximated after the fact, [docs/business-rules.md](docs/business-rules.md) says so.
 
 # Intended workflow:
 
 1. User pastes French text.
-2. Clicks “Améliorer”.
+2. Clicks “Corriger”.
 3. Tool applies safe corrections.
 4. User sees a diff view (red/green) and the final improved text.
 

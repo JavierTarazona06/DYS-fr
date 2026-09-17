@@ -16,11 +16,15 @@ Nothing here has been fixed. This is an inventory, not a change. Open work is in
 | Status | Meaning |
 |---|---|
 | **Implemented** | Code enforces the rule |
+| **Implemented differently** | Enforced, by a different mechanism than the rule describes |
+| **Superseded** | Replaced by another rule or decision that covers its intent |
 | **Partial** | Enforced in some paths only, or materially weaker than stated |
 | **Prompt-only** | Stated in the LLM prompt; no programmatic check. A model may ignore it |
 | **Disabled** | The code exists and works, but nothing calls it |
 | **Dead code** | The code runs but is structurally a no-op |
 | **Not implemented** | No code corresponds to the rule |
+| **Not applied / Not enforced** | A setting or analysis exists but the code does not follow it |
+| **Not met** | Measured, and the measurement falls short |
 | **N/A** | Not a software rule (project management, human study) |
 
 Source paths are relative to the repository root. Line numbers were re-verified against the
@@ -34,27 +38,30 @@ The core safety promise: a correction may fix form, never add content.
 
 | # | Rule | Source | Status | Where |
 |---|---|---|---|---|
-| A1 | Return a corrected version **without adding new information** | `docs/archive/Conception French Version.md:6`, `README.md:16`, `.tex:45` | Partial | Only entity masking, `src/guardrails/entities.py:75`, called from all three improvers |
+| A1 | Return a corrected version **without adding new information** | `docs/archive/Conception French Version.md:6`, `README.md:16`, `.tex:45` | Partial | The final gate `should_accept_correction` (`src/guardrails/policy.py`) runs in all three improvers: no new entities, proper nouns, numbers or dates, neologisms, lost words, and a novelty ratio of at most 12%. LanguageTool replacements are also filtered one by one (`src/improvers/lt_improver.py`). Partial because the novelty check is a ratio, and changes carried only by function words are not counted |
 | A2 | Output entities must be a subset of input entities: `NER(out) ⊆ NER(in)` | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:31` | **Implemented** | `src/guardrails/policy.py`, wired into all three improvers via `should_accept_correction`; tolerant of spelling corrections so it does not reject the product's own work |
-| A3 | Output numbers/dates must be a subset of input numbers/dates | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:31` | Partial | `_does_not_add_digits` blocks only *introducing* a digit, `src/improvers/lt_improver.py:73`; a TODO at line 72 admits digits can still be **changed**. `src/guardrails/numbers_date.py` is empty |
-| A4 | New or modified proper nouns (PROPN) must be blocked | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:32` | Partial | **Enforced in the LT path** by `_does_not_introduce_proper_noun`, `src/improvers/lt_improver.py` (TODO-9). `validate_no_new_propn` is still a `pass` stub, `src/guardrails/policy.py:17`, so the LLM path is unguarded |
-| A5 | No new meaning-bearing words (nouns, verbs, adjectives, adverbs) | `docs/Ideas prompt.txt:32` | Partial | **Enforced in the LT path** by `_does_not_insert_words`, `src/improvers/lt_improver.py`, which allows re-segmenting the user's letters but refuses inserting a word. Still prompt-only in the LLM path, `src/improvers/llm_improver.py:108` |
-| A6 | New discourse connectors ("En effet", "Par conséquent") must be blocked | `docs/archive/Moteur DYS fr.md:17` | Partial | Covered incidentally in the LT path by `_does_not_insert_words`: a connector is a word insertion. No dedicated connector list, and nothing in the LLM path |
+| A3 | Output numbers/dates must be a subset of input numbers/dates | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:31` | **Implemented** | `validate_no_new_numbers_dates` in the final gate, all three improvers, backed by `src/guardrails/numbers_date.py`. Counts as a multiset, so a *changed* digit is a new one. Also `_does_not_add_digits` per replacement in light mode |
+| A4 | New or modified proper nouns (PROPN) must be blocked | `docs/archive/Conception French Version.md:69`, `docs/archive/Moteur DYS fr.md:32` | **Implemented** | `validate_no_new_propn` in the final gate, all three improvers, and `_does_not_introduce_proper_noun` per replacement in light mode (TODO-9). Known defect: the light-mode guard misreads capitals the user typed (TODO-19) |
+| A5 | No new meaning-bearing words (nouns, verbs, adjectives, adverbs) | `docs/Ideas prompt.txt:32` | Partial | Strict in light mode: `_does_not_insert_words` refuses inserting a word (TODO-18 notes a one-letter gap). In hybrid mode only bounded, by the 12% novelty ratio and the neologism check |
+| A6 | New discourse connectors ("En effet", "Par conséquent") must be blocked | `docs/archive/Moteur DYS fr.md:17` | Partial | No dedicated connector list. A connector is a word insertion, so light mode refuses it; hybrid mode catches it only when it pushes the novelty ratio past 12% |
 | A7 | Block paraphrase expanding **more than 15%** of tokens | `docs/archive/Moteur DYS fr.md:18` | **Implemented** | `src/guardrails/policy.py`, wired into all three improvers via `should_accept_correction`, threshold 12% (decision I-1) |
-| A8 | New-token ratio must stay **≤ 10–12%** ("stricter for DYS"); on failure return the normalized input | `docs/archive/Moteur DYS fr.md:33` | **Implemented** | `src/guardrails/policy.py`, threshold 12% (decision I-1). On failure the improvers return the input unchanged, not a normalised form |
+| A8 | New-token ratio must stay **≤ 10–12%** ("stricter for DYS"); on failure return the normalized input | `docs/archive/Moteur DYS fr.md:33` | **Implemented** | `src/guardrails/policy.py`, threshold 12% (decision I-1). On failure light mode returns the input unchanged and hybrid mode returns light mode's correction (TODO-6); neither normalises |
 | A9 | New-token ratio must stay **≤ 10–15%** (looser variant of A8) | `docs/archive/Conception French Version.md:69` | **Implemented** | `src/guardrails/policy.py`, wired into all three improvers via `should_accept_correction`, threshold 12% (decision I-1) |
 | A10 | A single LT replacement must not grow a sentence by more than **1 token** | `docs/archive/Conception French Version.md:96` | **Implemented** | `_token_delta_ok`, `src/improvers/lt_improver.py:77`, applied at line 186 |
 | A11 | Only replacements from a whitelist (articles, prepositions, contractions, punctuation) may be applied | `docs/archive/Conception French Version.md:97` | **Superseded** | The unreferenced whitelist was removed (TODO-2). Five per-replacement guards now do the job it was meant to, without blocking legitimate fixes like "sui"→"suis" |
 | A12 | Verbs must never be swapped for synonyms; tense and lexeme preserved | `docs/Ideas prompt.txt:20` | Partial | Asked in the prompt, `src/improvers/llm_improver.py:99`. Since 2026-09-17 `validate_no_lost_content_words` (`src/guardrails/preservation.py`) refuses an output where a content word the user wrote no longer appears by spelling or sound, which catches a lexeme swap. A change of tense that leaves the verb recognisable still passes — "aller" -> "allé" is also what a correction looks like (TODO-14) |
 | A13 | Register (familiar/formal) preserved; no summarizing, expanding or explaining | `docs/Ideas prompt.txt:39` | Partial | Asked in the prompt, `src/improvers/llm_improver.py:113`. Summarizing is caught since 2026-09-17 by `validate_no_lost_content_words`, and expanding by the novelty ratio; register itself is not checked (TODO-14) |
 
-**Every rule in this section is now enforced in code.** The validation layer that was five
+**Every rule in this section now has code behind it.** The validation layer that was five
 `pass` stubs until 2026-09-08 is implemented and `should_accept_correction` is called by all
 three improvers, so the LLM path is guarded too — it has no per-replacement filtering, so
-this is the only thing between a rewrite and the user.
+this is the only thing between a rewrite and the user. Since 2026-09-17 it also refuses
+outputs that drop or swap a word the user wrote (TODO-14), which moved A12 and A13 off
+prompt-only.
 
-Three remain prompt-only (A12, A13 and the marker rule B2): they are instructions to a model
-about *how* to rewrite, which no post-hoc check can verify.
+Five remain partial, for two reasons: hybrid mode bounds new words with a ratio rather than
+refusing each one (A1, A5, A6), and a rule about *how* to rewrite — tense, register — can
+only be approximated after the fact (A12, A13).
 
 ---
 
@@ -62,11 +69,12 @@ about *how* to rewrite, which no post-hoc check can verify.
 
 | # | Rule | Source | Status | Where |
 |---|---|---|---|---|
-| B1 | A deliberately incomplete prompt ("l'année de l'indépendance des États-Unis est le .. de ..") must come back **still incomplete** — the tool must not answer it | `docs/archive/Conception French Version.md:98`, `.tex:58,178` | Partial | No engine guard. The instruction existed in a draft (`docs/archive/MistralTasks.md:120`) but is **absent from both shipped prompts**. Covered only by `tests/test_languagetool.py:107`, light mode only |
+| B1 | A deliberately incomplete prompt ("l'année de l'indépendance des États-Unis est le .. de ..") must come back **still incomplete** — the tool must not answer it | `docs/archive/Conception French Version.md:98`, `.tex:58,178` | Partial | Light mode blocks `DOUBLE_PUNCTUATION` (`_BLOCK_RULES`, TODO-10) and the QA corpus checks it on every run (`src/qa/runner.py`). Still no instruction in the shipped prompts; in hybrid mode a filled-in date or number is refused by the final gate, a filled-in word is not. "de" after the blank is capitalised (TODO-16) |
 | B2 | Entity markers `ENT_X_Y` must be copied verbatim — never deleted, moved or altered | `docs/Ideas prompt.txt:15` | Prompt-only | `src/improvers/llm_improver.py:77`; reinjection at `src/guardrails/entities.py:128` restores originals but cannot detect a mangled marker |
 
 B1 is a client acceptance criterion (`.tex:178`) and is the rule most exposed to a model
-that decides to be helpful. In hybrid mode nothing prevents it.
+that decides to be helpful. In hybrid mode only the final gate stands in the way, and it
+refuses a filled-in number or date but not a filled-in word.
 
 ---
 
@@ -86,8 +94,9 @@ that decides to be helpful. In hybrid mode nothing prevents it.
 | C10 | Three-level intervention slider — **Fidèle** / **Équilibré** (default) / **Plus simple** (caps sentences at **25–28 words**) | `docs/archive/Moteur DYS fr.md:36-41` | Not implemented | No slider anywhere in `src/ui/`. The sidebar selects the engine, not an intervention level |
 | C11 | Optional user dictionary (TXT of allowed surnames, toponyms, school jargon) loaded from `resources/` | `docs/archive/Moteur DYS fr.md:46` | Not implemented | — |
 
-**Eight of eleven are absent.** C8 is the more serious entry: it is not missing, it is
-present and inert, which reads as protection in a code review.
+**Six of eleven have no implementation**, among them the intervention levels (C10) and
+sentence splitting (C2), which is what readability (H6) is waiting for. C8, which used to be
+present and inert, was replaced by blocking harmful rules by id.
 
 ---
 
@@ -105,7 +114,7 @@ present and inert, which reads as protection in a code review.
 
 ## E. Accessibility
 
-The reason the product exists. This is the weakest section in the inventory.
+The reason the product exists.
 
 | # | Rule | Source | Status | Where |
 |---|---|---|---|---|
@@ -120,9 +129,10 @@ The reason the product exists. This is the weakest section in the inventory.
 | E9 | Loading progress bar and quality/latency profiles (Rapide / Équilibré / Max Qualité) | `docs/archive/Conception French Version.md:112` | Not implemented | Only a spinner, `app.py:29` |
 | E10 | All user-facing strings in French, in one place | — | Partial | `src/ui/content.py` holds most, but French strings are hardcoded at `app.py:25,29,36,56` and `src/ui/layout.py:97-112` |
 
-**Five of the six accessibility features the README advertises do not exist.** The public
-README presents them as delivered. This is the single largest gap between claim and code
-in the project, and it is the gap most visible to anyone who finds the repository.
+**Two of the five accessibility features the README advertises do not exist yet**:
+dyslexia-friendly fonts (E1) and high contrast (E4). Font size, line spacing and focus mode
+landed in phase 3a (E2, E3, E5), along with the diff view (E6). Quality/latency profiles
+(E9) are not built.
 
 ---
 
@@ -160,25 +170,27 @@ The strongest section: these hold.
 
 | # | Rule | Source | Status | Where |
 |---|---|---|---|---|
-| H1 | QA corpus of **25–40** short anonymized DYS texts | `docs/archive/QA fr.md:5` | Not implemented | No corpus in the repository |
-| H2 | E2E set of **20–30** typical French DYS sentences | `docs/archive/Conception French Version.md:165` | Not implemented | Conflicts with H1. See I-10 |
-| H3 | Illegal additions (entities, dates, numbers) must be exactly **0%** | `docs/archive/QA fr.md:9` | Partial | Spot-checked by `tests/test_languagetool.py:76` and `tests/test_llm_mistral.py:134`; no metric is computed |
-| H4 | Spelling and grammar errors must drop by **≥ 80%** (LT pre/post count) | `docs/archive/QA fr.md:10`, `README.md:12` | Not implemented | The 80% figures in `tests/test_llm_mistral.py:131` and `tests/test_spacy.py:60` are *test-case pass rates* — a different metric that happens to share the number |
-| H5 | Mean sentence length **≤ 30–35 words** in Équilibré, **≤ 28** in Plus simple | `docs/archive/QA fr.md:11` | Not implemented | Depends on C10, which does not exist |
-| H6 | A French readability proxy must improve | `docs/archive/QA fr.md:12` | Not implemented | — |
+| H1 | QA corpus of **25–40** short anonymized DYS texts | `docs/archive/QA fr.md:5` | **Implemented differently** | `src/qa/corpus.py`: 30 hand-written texts with dyslexic errors injected per a published taxonomy (decision I-10). Simulated, not real DYS writing: no such corpus is downloadable (see `docs/completion-plan.md`) |
+| H2 | E2E set of **20–30** typical French DYS sentences | `docs/archive/Conception French Version.md:165` | **Superseded** | By H1, decision I-10: texts rather than isolated sentences |
+| H3 | Illegal additions (entities, dates, numbers) must be exactly **0%** | `docs/archive/QA fr.md:9` | Partial | Computed by `src/qa/metrics.py` and gated at exactly 0 by `tests/test_qa_acceptance.py`; holds at 0 on the fixed corpus and on seeds 7 and 42. Light mode only: the QA runner does not exercise hybrid mode |
+| H4 | Spelling and grammar errors must drop by **≥ 80%** (LT pre/post count) | `docs/archive/QA fr.md:10`, `README.md:12` | Partial | Computed and gated at 80% by `tests/test_qa_acceptance.py`: 87.1% on the fixed corpus, light mode. Fails on another seed (78.6%, TODO-20), and hybrid mode is not measured |
+| H5 | Mean sentence length **≤ 30–35 words** in Équilibré, **≤ 28** in Plus simple | `docs/archive/QA fr.md:11` | Partial | Computed and gated by `tests/test_qa_acceptance.py`: 7.5 words against the 35 bound. The 28-word "Plus simple" bound cannot apply until C10 exists |
+| H6 | A French readability proxy must improve | `docs/archive/QA fr.md:12` | Not met | Computed by `src/qa/metrics.py` (syllables per sentence): 11.1 before, 11.2 after. Light mode never shortens a sentence, so this cannot improve until sentence splitting (C2) lands |
 | H7 | Validation with **6–8 DYS users**, mean **≥ 4/5** on "clearer?" and "less tiring?" | `docs/archive/QA fr.md:13-15` | N/A | Human study; no records in the repository |
-| H8 | Adversarial: input with no numbers/dates/entities → output identical | `docs/archive/QA fr.md:19` | Not implemented | — |
-| H9 | Adversarial: proper nouns never invented or modified | `docs/archive/QA fr.md:20` | **Implemented** | `tests/test_languagetool.py:76`, `tests/test_llm_mistral.py:134` |
-| H10 | Adversarial: **4–6 word** sentences must not be lengthened with connectors | `docs/archive/QA fr.md:21` | Not implemented | — |
-| H11 | Adversarial: mixed text (FR + acronyms/URLs) must not "correct" the URL or acronym | `docs/archive/QA fr.md:22` | Not implemented | — |
-| H12 | Hybrid QA: markers never altered; degradation on LT-score increase; simulated-OOM fallback to Gemma | `docs/archive/Conception French Version.md:171` | Partial | Only the first is covered. Degradation is untested and defective (TODO-1); the OOM fallback does not exist (D3) |
-| H13 | Unit tests for normalization, the LT suggestion parser, and the guardrail filters | `docs/archive/Conception French Version.md:164` | Not implemented | No test touches `_is_whitelist_change`, `_token_delta_ok` or `_does_not_add_digits` |
+| H8 | Adversarial: input with no numbers/dates/entities → output identical | `docs/archive/QA fr.md:19` | **Implemented** | Adversarial corpus text checked on every QA run, `src/qa/runner.py` (`_check_adversarial`). Light mode |
+| H9 | Adversarial: proper nouns never invented or modified | `docs/archive/QA fr.md:20` | **Implemented** | Adversarial corpus text checked on every QA run, `src/qa/runner.py`; plus `tests/test_languagetool.py:76` and `tests/test_llm_mistral.py:134` |
+| H10 | Adversarial: **4–6 word** sentences must not be lengthened with connectors | `docs/archive/QA fr.md:21` | **Implemented** | Adversarial corpus text checked on every QA run, `src/qa/runner.py`. Light mode |
+| H11 | Adversarial: mixed text (FR + acronyms/URLs) must not "correct" the URL or acronym | `docs/archive/QA fr.md:22` | **Implemented** | Adversarial corpus text checked on every QA run, `src/qa/runner.py`: "CAF", "SMS" and a URL must survive. Light mode |
+| H12 | Hybrid QA: markers never altered; degradation on LT-score increase; simulated-OOM fallback to Gemma | `docs/archive/Conception French Version.md:171` | Partial | Degradation is fixed (TODO-1, TODO-6) and its wiring tested in `tests/test_hybrid_fallback.py`. Marker integrity is covered only indirectly: a mangled marker fails the final gate. The simulated-OOM fallback to Gemma does not exist (D3) |
+| H13 | Unit tests for normalization, the LT suggestion parser, and the guardrail filters | `docs/archive/Conception French Version.md:164` | **Implemented** | `tests/test_lt_guardrails.py` (every per-replacement guard, normalisation, suggestion choice), `tests/test_guardrails_policy.py` (every final-gate validator, against the real spaCy model), `tests/test_hybrid_fallback.py` |
 | H14 | Client acceptance: **1-click** install and launch | `.tex:176` | **Implemented** | `packaging/windows/smoke_test.py`, per `docs/windows_release_checklist.md:44` |
-| H15 | Client acceptance: numbers, dates and names identical; ".." and "…" left uncompleted | `.tex:178` | Partial | See B1 — light mode only |
+| H15 | Client acceptance: numbers, dates and names identical; ".." and "…" left uncompleted | `.tex:178` | Partial | Numbers, dates and names are enforced by the final gate in all three engines; ".." is kept in light mode (B1). The word after the blank is capitalised (TODO-16) |
 | H16 | Client acceptance: changes visible in a diff, operation fully offline | `.tex:180` | **Implemented** | `src/ui/layout.py:93`; offline verified at `docs/windows_release_checklist.md:56` |
 
-**Nine of sixteen QA criteria have no implementation.** None of the four quantitative
-metrics that define "fit for end users" (H3–H6) is computed anywhere.
+**The four quantitative metrics (H3–H6) are computed on every QA run** and the adversarial
+texts (H8–H11) are checked, all in light mode. Two caveats keep this section from being
+done: H6 does not improve, and H4 holds on the fixed corpus but not on every seed (TODO-20).
+Hybrid mode is not measured by the runner at all.
 
 ---
 
@@ -211,20 +223,24 @@ rules above can be called a specification; they are queued in [TODO.md](TODO.md)
 
 Of **71 documented rules**:
 
-- **23 are enforced** — 20 outright, 2 implemented differently from the letter of the spec
-  (C7, C8), and 1 superseded by better guards (A11). The offline guarantees (F), the
-  packaged Windows delivery, the whole no-additions layer (A), and reading comfort (E2, E3,
-  E5, E6).
+- **32 are enforced** — 27 outright, 3 implemented differently from the letter of the spec
+  (C7, C8, H1), and 2 superseded (A11, H2). The offline guarantees (F), the packaged Windows
+  delivery, most of the no-additions layer (A), reading comfort (E2, E3, E5, E6),
+  degradation (D1, D2), and the QA corpus with its adversarial checks (H).
 - **18 are partial** — approximated, or holding in one engine path but not the other.
-- **3 are prompt-only** — instructions to a model that no post-hoc check can verify.
-- **25 are not implemented or not applied** — the rest of the accessibility layer (E1 fonts,
-  E4 high contrast, E9 profiles) and the QA criteria (H).
+- **1 is prompt-only** — marker integrity (B2).
+- **18 are not implemented, not applied or not met** — the rest of the accessibility layer
+  (E1 fonts, E4 high contrast, E9 profiles), most of the edit scope (C2–C5, C10, C11),
+  performance and resource settings (G), and readability (H6).
 - **2 are not software rules.**
 
-Counts as of 2026-09-09. Section A went from six unimplemented rules to none when the
-guardrail layer landed, and three of the five advertised accessibility features now exist.
-Nothing is "dead code" or "disabled" any more: the two entries that were (A11, C8) were
-resolved by removing the inert code and replacing it.
+Counts as of 2026-09-17. Section A went from six unimplemented rules to none when the
+guardrail layer landed on 2026-09-09, and three of the five advertised accessibility
+features now exist. The jump since then is partly new work — lost words (TODO-14) and
+hybrid degradation (TODO-6) — and partly bookkeeping: the QA rows still described the state
+before phases 1 and 2, and were only brought up to date on 2026-09-17 (DOC-3). Nothing is
+"dead code" or "disabled" any more: the two entries that were (A11, C8) were resolved by
+removing the inert code and replacing it.
 
 The original pattern was that **what got built was the delivery mechanism, and what got
 skipped was the safety layer and the accessibility layer** — the two things that

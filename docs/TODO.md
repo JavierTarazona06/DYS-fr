@@ -63,31 +63,6 @@ Rebuilt the installer from `784507d`, uninstalled the 2026-09-08 build, reinstal
 
 ## Code defects
 
-### TODO-2 · Whitelist guardrail disabled, with a comment that misstates why — **High**
-
-`src/improvers/lt_improver.py:174`
-
-`_is_whitelist_change` (line 82) is written and correct, and nothing calls it. The comment
-in its place lists the guardrails supposedly compensating for it:
-
-```
-# - No new entities (checked via spaCy NER)
-```
-
-There is no such check. spaCy is used for *masking* before correction, not for validating
-the result, and `validate_no_new_entities` is a `pass` stub. Two of the four compensating
-guardrails the comment claims do not exist.
-
-The disabling itself may well be correct — the comment notes the whitelist blocked
-legitimate corrections like "sui"→"suis".
-
-**Partly resolved 2026-09-08**: the false justification is gone. The comment now lists
-the guards that actually run and states plainly that entity masking does not validate
-the result and that `_safe_by_category` is inert. What remains open is the decision
-itself — keep the whitelist disabled, or repair and re-enable it.
-
-Affects rule A11.
-
 ### TODO-4 · Configured temperature is silently discarded — **Medium**
 
 `src/improvers/llm_improver.py:231`
@@ -278,26 +253,21 @@ Affects rule H4.
 Found during the 2026-09-17 review. Each is a false statement in a document that people
 and agents act on.
 
-- **DOC-1 · `AGENTS.md` describes the guardrail layer as stubs.** "Rules that matter" says
-  `policy.py` is unimplemented stubs, `novelty.py` and `numbers_date.py` are empty, and
-  nothing calls `should_accept_correction`. All false since `b5789ab`. It is the first
-  file every agent reads, and it tells them the safety layer does not run.
-- **DOC-2 · `README.md` marks built features as unbuilt.** 🚧 still sits on adjustable
-  font size, line spacing and focus mode (built in phase 3a), on the validation layer
-  ("not yet wired in") and the QA corpus (phases 1-2), and says no-additions is "enforced
-  only by entity masking". Only E1 (fonts) and E4 (high contrast) are still unbuilt.
-- **DOC-3 · `business-rules.md` rows not updated after phases 1 and 2.** A1 says "Only
-  entity masking"; A3 says `numbers_date.py` is empty; H3 says "no metric is computed"; H12
-  calls the degradation check defective (TODO-1, fixed); H13 says no test touches
-  `_token_delta_ok` or `_does_not_add_digits` and cites the removed `_is_whitelist_change`;
-  H1 and H4 are "Not implemented" although `src/qa/` measures them. Section J was updated on
-  2026-09-09; these rows were not.
-- **DOC-4 · TODO-2 is filed as an open defect but is resolved.** This file says "partly
-  resolved", `completion-plan.md` says "resolved by removal", `business-rules.md` A11 says
-  "Superseded", and `_is_whitelist_change` no longer exists. Move it to **Fixed**.
+No open entries. All five found on 2026-09-17 were corrected the same day:
 
-DOC-5, the completion plan claiming the "depui" rewrite was stopped, was corrected with
-TODO-13 on 2026-09-17.
+- **DOC-1** · `AGENTS.md` described the guardrail layer as unimplemented stubs. Rewritten to
+  describe both layers, the QA runner and `LT_DEBUG_FILTER`. `AGENTS.md` is gitignored
+  (`010aa78`), so the correction lives in the working copy it was made in, not in the
+  repository — other clones still carry their own copy.
+- **DOC-2** · `README.md` marked built features as unbuilt and named the wrong button
+  ("Améliorer" for "Corriger"). Now only fonts, high contrast and sentence splitting carry 🚧.
+- **DOC-3** · `business-rules.md` had not recorded phases 1 and 2. Beyond the rows listed at
+  the time (A1, A3, H1, H3, H4, H12, H13), A4, A5, A6, B1, H2, H5, H6, H8–H11 and H15 were
+  also stale, as were the summaries of sections A, B, C, E and H. Section J recounted: 32 of
+  71 rules enforced, up from 23.
+- **DOC-4** · TODO-2 moved to **Fixed**.
+- **DOC-5** · `completion-plan.md` claimed the "depui" rewrite was stopped; corrected with
+  TODO-13.
 
 ---
 
@@ -336,7 +306,7 @@ page. Tick them off here and record the detail there.
 - [ ] **E4** — high-contrast mode (phase 3c)
 - [ ] **C10** — intervention levels Fidèle / Équilibré / Plus simple (phase 3)
 - [ ] **C2 / I-3** — bounded sentence splitting; H6 readability cannot improve without it
-- [ ] **TODO-4 to TODO-8** — hybrid robustness (phase 4)
+- [ ] **TODO-4, TODO-5, TODO-7, TODO-8** — hybrid robustness (phase 4; TODO-6 is fixed)
 - [ ] **D3** — automatic Gemma fallback with hardware detection; `src/utils/hw.py` does not
       exist (phase 4)
 - [ ] **I-7** — `max_tokens: 512`; `config.yaml` still says 526
@@ -379,8 +349,8 @@ documents rather than open questions, and they are recorded in
 
 `README.md` advertised five accessibility features that did not exist (E1–E5) and named
 Hunspell as part of the engine. Decided 2026-09-08: build the features and mark them 🚧 until
-then, and drop Hunspell (I-4). Three of the five now exist; the README has not caught up,
-which is DOC-2.
+then, and drop Hunspell (I-4). Three of the five now exist, and since DOC-2 the README says
+so.
 
 ---
 
@@ -412,6 +382,36 @@ Affects rule D2, and makes H12's untested degradation check untestable as writte
 **Fixed 2026-09-09**: both sides now count raw LanguageTool matches
 (`src/improvers/llm_improver.py`). The commented-out correct line was restored and the
 hint list is used only for prompting.
+
+### TODO-2 · Whitelist guardrail disabled, with a comment that misstates why — **High**
+
+`src/improvers/lt_improver.py:174`
+
+`_is_whitelist_change` (line 82) is written and correct, and nothing calls it. The comment
+in its place lists the guardrails supposedly compensating for it:
+
+```
+# - No new entities (checked via spaCy NER)
+```
+
+There is no such check. spaCy is used for *masking* before correction, not for validating
+the result, and `validate_no_new_entities` is a `pass` stub. Two of the four compensating
+guardrails the comment claims do not exist.
+
+The disabling itself may well be correct — the comment notes the whitelist blocked
+legitimate corrections like "sui"→"suis".
+
+**Partly resolved 2026-09-08**: the false justification is gone. The comment now lists
+the guards that actually run and states plainly that entity masking does not validate
+the result and that `_safe_by_category` is inert. What remains open is the decision
+itself — keep the whitelist disabled, or repair and re-enable it.
+
+Affects rule A11.
+
+**Resolved 2026-09-09 by removal**, recorded here only on 2026-09-17 (DOC-4). The whitelist
+was not repaired: `_is_whitelist_change` is gone, and the per-replacement guards in
+`src/improvers/lt_improver.py` do its job without refusing fixes like "sui" -> "suis". Rule
+A11 is marked Superseded.
 
 ### TODO-3 · LanguageTool category filter is structurally a no-op — **Medium-High**
 
