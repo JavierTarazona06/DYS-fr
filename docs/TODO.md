@@ -7,7 +7,7 @@ note of how.
 [completion-plan.md](completion-plan.md) schedules this queue: the decisions below were
 Phase 0; TODO-2 is Phase 2; TODO-4 to TODO-8 and TODO-11 are Phase 4.
 TODO-9 and TODO-10 were fixed on 2026-09-08. TODO-12 to TODO-17 were found by the full
-reinstall test of 2026-09-17.
+reinstall test of 2026-09-17, and TODO-18 to TODO-20 while fixing TODO-13 the same day.
 
 Five sections:
 
@@ -218,6 +218,62 @@ an interface built for dyslexic readers. `--client.toolbarMode=minimal` (support
 pinned Streamlit 1.51) removes it. Focus mode already hides it.
 
 Affects rule E8.
+
+### TODO-18 · The insertion guard lets a one-letter word through — **Medium**
+
+`src/improvers/lt_improver.py:129` (`_does_not_insert_words`)
+
+Found while fixing TODO-13. For "Il fiat chaud", `SUJET_AUXILIAIRE` suggests
+`["est fiat", "a fiat", ...]`. The first is refused; the second would be accepted, because
+"fiat" -> "afiat" is one edit and the guard's budget on short spans is one. Any one-letter
+word — "a", "y", "à" — can be inserted in front of the user's word this way.
+
+The TODO-13 fix never reaches "a fiat", since an insertion refusal ends the search. But a
+rule whose *first* suggestion is a one-letter insertion is applied today. A sharper test than
+distance: when every token the user wrote survives unchanged in the replacement, the extra
+tokens are an insertion, whatever the letter count.
+
+Affects rules A5 and A6.
+
+### TODO-19 · The proper-noun guard misreads capitals the user typed — **Medium**
+
+`src/improvers/lt_improver.py:84` (`_does_not_introduce_proper_noun`)
+
+The guard asks whether a capitalised segment's letters appear in the original, not whether
+the capital is new. That fails in both directions:
+
+- **Refuses a fix.** "Luer fille" at the start of a sentence: LanguageTool's first suggestion
+  is "Leur", refused because "leur" is not a substring of "luer". The capital is the
+  user's own, not an invented name, and the error stays.
+- **Allows an invention.** "Nous l'avon mangéée" becomes "Nous l'Avon mangéée" (corpus
+  `t02`, present in the phase 1 baseline): "avon" is contained in "lavon", so the brand name
+  passes.
+
+A positional test — a capital is invented when the letter the user typed there was lowercase
+— fixes both, but would also refuse "paris" -> "Paris", which the guard deliberately allows.
+Needs a decision on that case before it can be written.
+
+Affects rules A4 and H9.
+
+### TODO-20 · H4 passes on the fixed corpus seed and fails on another — **Medium**
+
+`tests/test_qa_acceptance.py:53`, `src/qa/corpus.py:187`
+
+The acceptance gate runs one corpus, generated from `DEFAULT_SEED`. Measured on
+2026-09-17 against two other seeds, with the TODO-13 fix in place:
+
+| Seed | H3 | H4 |
+|---|---|---|
+| default | 0 | **87.1%** (93 → 12) |
+| 7 | 0 | 86.6% (97 → 13) |
+| 42 | 0 | **78.6%** (98 → 21), below the 80% target |
+
+H3 held at 0 on all three, which is the absolute requirement. But "H4 ≥ 80%" is a property of
+one sample, not of the engine: the same code fails it on a corpus drawn from the same
+taxonomy. Either run the gate over several seeds and report the spread, or state the target
+as holding on the fixed corpus only. Worth knowing before quoting the number to the client.
+
+Affects rule H4.
 
 ---
 
@@ -490,8 +546,8 @@ letters was wrong: "d'appui", "d'ans" for "daans", "m'entre" for "montrré", "l'
 past refusals that mean LanguageTool reached for a different kind of word — a split elision
 or an invented proper noun. Any other refusal still ends the search. Walking past every
 refusal was measured first and rejected: it turned "quil" into "qui", "mangéée" into
-"mangées", and let "Il fiat chaud" become "Il a fiat chaud". Six suggestions
-instead of four reached "Lue" for "Luer".
+"mangées", and let "Il fiat chaud" become "Il a fiat chaud" (TODO-18). Six suggestions
+instead of four reached "Lue" for "Luer" (TODO-19).
 
 Guard alone would have been the wrong stopping point: H4 fell to 79.6%, because LanguageTool
 does not flag "d'appui" and the metric had been rewarding the wrong fix.
@@ -505,5 +561,5 @@ does not flag "d'appui" and the metric had been rewarding the wrong fix.
 Across the three corpora and 19 probe sentences, 11 texts and 6 probes changed, every one
 for the better: "depuis" 6 times, "douze" 3, "dans" 3, "montré" 2, and "l'école", "devant",
 "tante" and "préfère" once each. None changed for the worse. Adversarial checks pass on all
-three corpora. Seed 42 sits below target before and after, so that is not a
+three corpora. Seed 42 sits below target before and after; that is TODO-20, not a
 regression. 17 unit tests added.
