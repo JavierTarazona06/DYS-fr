@@ -178,18 +178,6 @@ the blank.
 
 Affects rules B1 and H15.
 
-### TODO-17 · Streamlit's "Deploy" button is shown in the packaged app — **Low**
-
-`src/runtime/launcher.py:129-134`
-
-The launcher disables telemetry and development mode, but not the toolbar, so the offline
-desktop app shows a "Deploy" button that leads to Streamlit Community Cloud. It needs a
-network connection, means nothing to a user of this product, and is one more distraction in
-an interface built for dyslexic readers. `--client.toolbarMode=minimal` (supported by the
-pinned Streamlit 1.51) removes it. Focus mode already hides it.
-
-Affects rule E8.
-
 ### TODO-18 · The insertion guard lets a one-letter word through — **Medium**
 
 `src/improvers/lt_improver.py:129` (`_does_not_insert_words`)
@@ -713,3 +701,30 @@ counterpart and stays new. That case is now a test.
 Known consequence: the second output above is accepted, and "tous les jours" became "tout le
 jour" — a change carried only by function words, which neither this guard nor the lost-words
 check counts. 4 tests added.
+
+### TODO-17 · Streamlit's "Deploy" button is shown in the packaged app — **Low**
+
+`src/runtime/launcher.py:129-134`
+
+The launcher disabled telemetry and development mode, but not the toolbar, so the offline
+desktop app showed a "Deploy" button that leads to Streamlit Community Cloud. It needs a
+network connection, means nothing to a user of this product, and is one more distraction in
+an interface built for dyslexic readers. `--client.toolbarMode=minimal` (supported by the
+pinned Streamlit 1.51) removes it. Focus mode already hides it.
+
+Affects rule E8.
+
+**Fixed 2026-09-17** with `--client.toolbarMode=viewer`, not the `minimal` suggested above.
+Checked in the browser against the running app, one server per mode:
+
+| Mode | "Deploy" | Main menu |
+|---|---|---|
+| default (`auto`) | shown | Rerun, Settings, Print, Record a screencast, Developer options, Clear cache |
+| `viewer` | **hidden** | Rerun, Settings, Print, Record a screencast |
+| `minimal` | hidden | none at all |
+
+`minimal` would also have removed Settings, where a user picks a light or dark theme — an
+accessibility control. `viewer` additionally drops "Clear cache", which in this app would
+force the AI model to reload. The argv is now built by `_streamlit_argv` and pinned by
+`tests/test_launcher_streamlit_flags.py`, including loopback-only serving and no usage
+statistics. Not yet seen in a rebuilt installer.

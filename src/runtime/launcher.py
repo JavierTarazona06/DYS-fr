@@ -118,11 +118,8 @@ def _spawn_lt_health_logger(lt_server, timeout_s: float = 60.0) -> None:
     threading.Thread(target=_worker, daemon=True).start()
 
 
-def _run_streamlit(app_script: Path, port: int) -> int:
-    from streamlit.web import cli as stcli
-
-    argv_backup = list(sys.argv)
-    sys.argv = [
+def _streamlit_argv(app_script: Path, port: int) -> list[str]:
+    return [
         "streamlit",
         "run",
         str(app_script),
@@ -132,7 +129,19 @@ def _run_streamlit(app_script: Path, port: int) -> int:
         "--browser.gatherUsageStats=false",
         "--global.developmentMode=false",
         "--server.headless=true",
+        # Hides the "Deploy" button, which leads to Streamlit Community Cloud, and the
+        # developer menu, whose "Clear cache" would force the AI model to reload. "viewer"
+        # rather than "minimal": minimal also removes Settings, where users pick a light or
+        # dark theme. See TODO-17.
+        "--client.toolbarMode=viewer",
     ]
+
+
+def _run_streamlit(app_script: Path, port: int) -> int:
+    from streamlit.web import cli as stcli
+
+    argv_backup = list(sys.argv)
+    sys.argv = _streamlit_argv(app_script, port)
     try:
         try:
             stcli.main()
