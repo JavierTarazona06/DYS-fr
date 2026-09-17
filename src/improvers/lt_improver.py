@@ -54,10 +54,17 @@ def _category_of(match) -> str:
     except Exception:
         return ""
 
-def _first_replacement(match) -> str | None:
-    """Get the first replacement suggestion from the match"""
-    reps = match.replacements or []
-    return reps[0] if reps else None
+#: How far down LanguageTool's suggestion list to look when the first one is refused.
+#: Measured on the QA corpus: 4 reaches "depuis" and "douze", both fourth; 6 also reaches
+#: "Lue" for "Luer", a wrong fix, so quality has fallen off by then.
+_MAX_CANDIDATES = 4
+
+_APOSTROPHES = ("'", "’")
+
+
+def _candidate_replacements(match) -> list[str]:
+    """LanguageTool's suggestions, in its own order, capped at _MAX_CANDIDATES."""
+    return list(match.replacements or [])[:_MAX_CANDIDATES]
 
  #TODO: However it can change the  digit, we need to block it ?
 def _does_not_add_digits(orig: str, repl: str) -> bool:
@@ -103,10 +110,12 @@ def _stays_close_to_the_original(orig: str, repl: str) -> bool:
     "montrré commen" into "m'entre nommer-en" and "kompliqué" into "complice". Those are
     rewrites, not corrections, and they reach a reader who has no way to tell.
 
-    Judging the replacement against *its own span* is what makes this work. The whole-text
-    policy layer cannot separate a good fix from a bad one — "preske" -> "presque" and
-    "depui" -> "d'appui" are both two edits — but at this granularity a rewrite is
-    structurally far from what it replaces while a spelling fix is not.
+    Judging the replacement against *its own span* is what makes this work: the whole-text
+    policy layer cannot separate a good fix from a bad one, and at this granularity a
+    rewrite is usually far from what it replaces while a spelling fix is not.
+
+    Usually, not always. "depui" -> "d'appui" is two edits, the same as "preske" ->
+    "presque", and passes here; _does_not_elide_into_another_word is what refuses it.
 
     Re-segmentation is unaffected: "unepomme" -> "une pomme" normalises to the same string.
     """
@@ -139,6 +148,84 @@ def _does_not_insert_words(orig: str, repl: str) -> bool:
     replacement = normalise_for_comparison(repl)
     budget = 1 if len(original) <= 8 else 2
     return within_edit_distance(original, replacement, budget)
+
+
+def _does_not_elide_into_another_word(orig: str, repl: str) -> bool:
+    """Allow restoring an apostrophe the user left out; refuse one that changes their word.
+
+        "jai"   -> "j'ai"      the user's letters, with the elision restored
+        "depui" -> "d'appui"   an article split off, and a different word behind it
+
+    Distance cannot separate these. "depui" -> "d'appui" is two edits, the same as
+    "preske" -> "presque", and "daans" -> "d'ans" is only one. What gives them away is the
+    shape: a new apostrophe cuts the user's word in two, and a genuine elision fix does so
+    without touching a single letter. Every elision-introducing replacement the QA corpus
+    produced that changed letters was wrong. See TODO-13.
+
+    The cost is an elision fix that also needs a spelling fix ("lecol" -> "l'école"); that
+    word is left for the user, which is the cheaper mistake.
+    """
+    introduced = sum(repl.count(a) for a in _APOSTROPHES) > sum(orig.count(a) for a in _APOSTROPHES)
+    if not introduced:
+        return True
+    return normalise_for_comparison(orig) == normalise_for_comparison(repl)
+
+
+def _refusal_reason(orig: str, repl: str) -> str | None:
+    """Name of the first guard that refuses this replacement, or None when all accept it.
+
+    Guards, in order:
+        _does_not_add_digits               no digit introduced
+        _does_not_introduce_proper_noun    no invented capitalised word (TODO-9)
+        _does_not_insert_words             no word the user never wrote (A5)
+        _does_not_elide_into_another_word  no apostrophe that changes the word (TODO-13)
+        _stays_close_to_the_original       a fix, not a rewrite
+        _token_delta_ok                    at most one extra token
+    """
+    if not _does_not_add_digits(orig, repl):
+        return "adds_digits"
+    if not _does_not_introduce_proper_noun(orig, repl):
+        return "introduces_proper_noun"
+    if not _does_not_insert_words(orig, repl):
+        return "inserts_words"
+    if not _does_not_elide_into_another_word(orig, repl):
+        return "elides_into_another_word"
+    if not _stays_close_to_the_original(orig, repl):
+        return "rewrite_not_correction"
+    if not _token_delta_ok(orig, repl, 1):
+        return "token_delta"
+    return None
+
+
+#: Refusals that mean "LanguageTool reached for a different kind of word", not "it does not
+#: know which word this is". Only these send the search on to the next suggestion.
+_WALK_PAST = {"elides_into_another_word", "introduces_proper_noun"}
+
+
+def _choose_replacement(orig: str, candidates: list[str]) -> tuple[str | None, list[tuple[str, str]]]:
+    """LanguageTool's best acceptable suggestion, and the ones refused on the way.
+
+    Its first suggestion is not always its right one. For "depui" the list is
+    ["d'appui", "d'étui", "d'époi", "depuis"], and for "duoze" it leads with the commune
+    "d'Eauze": the spell checker ranks elided forms and place names above the plain word.
+    When a suggestion is refused as that kind of invention, the next one is tried (TODO-13).
+
+    Any other refusal ends the search with no replacement, as before. Walking past those was
+    measured on the QA corpus and does harm: after a refused rewrite, the next suggestion for
+    "quil" is "qui", for "mangéée" is "mangées", and after a refused insertion for "fiat" it
+    is "a fiat". A spell checker whose best guess was too far off does not know the word.
+
+    Candidates keep LanguageTool's order, so its ranking still decides.
+    """
+    refused = []
+    for repl in candidates:
+        reason = _refusal_reason(orig, repl)
+        if reason is None:
+            return repl, refused
+        refused.append((repl, reason))
+        if reason not in _WALK_PAST:
+            break
+    return None, refused
 
 
 def _debug(reason: str, match, orig: str | None = None, repl: str | None = None) -> None:
@@ -204,50 +291,29 @@ class LTImprover(TextImprover):
             edits = []
 
             for m in matches:
-                repl = _first_replacement(m)
-                if not repl:
+                candidates = _candidate_replacements(m)
+                if not candidates:
                     _debug("no_replacement", m)
                     continue
 
                 if not _safe_by_rule(m):
-                    _debug("blocked_rule", m, repl=repl)
+                    _debug("blocked_rule", m, repl=candidates[0])
                     continue
 
                 orig = current[m.offset : m.offset + m.errorLength]
 
-                # Guards applied to every replacement, in order:
-                #   _safe_by_rule                    blocked rule ids (TODO-10)
-                #   _does_not_add_digits             no digit introduced
-                #   _does_not_introduce_proper_noun  no invented capitalised word (TODO-9)
-                #   _does_not_insert_words           no word the user never wrote (A5)
-                #   _stays_close_to_the_original     a fix, not a rewrite
-                #   _token_delta_ok                  at most one extra token
-                # The finished text is then judged as a whole by should_accept_correction
-                # below. Entity masking runs before correction and validates nothing.
+                # Per-replacement guards are listed in _refusal_reason. The finished text is
+                # then judged as a whole by should_accept_correction below. Entity masking
+                # runs before correction and validates nothing.
+                chosen, refused = _choose_replacement(orig, candidates)
+                for repl, reason in refused:
+                    _debug(reason, m, orig=orig, repl=repl)
 
-                if not _does_not_add_digits(orig, repl):
-                    _debug("adds_digits", m, orig=orig, repl=repl)
+                if chosen is None:
                     continue
 
-                if not _does_not_introduce_proper_noun(orig, repl):
-                    _debug("introduces_proper_noun", m, orig=orig, repl=repl)
-                    continue
-
-                if not _does_not_insert_words(orig, repl):
-                    _debug("inserts_words", m, orig=orig, repl=repl)
-                    continue
-
-                if not _stays_close_to_the_original(orig, repl):
-                    _debug("rewrite_not_correction", m, orig=orig, repl=repl)
-                    continue
-                
-                # CORRECTED LINE 132 (adjust line number if other changes were made)
-                if not _token_delta_ok(orig, repl, 1): # Here, simply pass the value 1
-                    _debug("token_delta", m, orig=orig, repl=repl)
-                    continue
-
-                edits.append((m.offset, m.errorLength, repl))
-                _debug_apply(m, orig, repl)
+                edits.append((m.offset, m.errorLength, chosen))
+                _debug_apply(m, orig, chosen)
 
             if not edits:
                 break

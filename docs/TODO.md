@@ -133,6 +133,13 @@ different and worse failure than a missed correction.
 
 **Reproduced 2026-09-17** on the installed build, identical output.
 
+**Half fixed 2026-09-17** by TODO-13: "montrré" -> "m'entre" was a split elision, and the
+engine now takes "montré" instead. The text reads "Il m'a montré nommes-en changer". The
+remaining half is a hyphen split, "commen" -> "nommes-en", the same shape as TODO-13 with a
+hyphen instead of an apostrophe. Extending that guard to hyphens is the obvious next step,
+but not a sufficient one: in `t20`, "rendon" -> "rend-on" keeps the user's letters exactly
+and is still wrong ("rendons").
+
 ### TODO-8 · Misleading comment on the hint cap — **Low**
 
 `src/improvers/llm_improver.py:128`
@@ -140,31 +147,6 @@ different and worse failure than a missed correction.
 The inline comment says `# Limit to top 5 errors`; the expression is
 `max(5, len(matches) * 0.1)`, which exceeds 5 on any text with more than 50 matches.
 Affects rule D4. Contributing cause of TODO-1.
-
-### TODO-13 · "depui" becomes "d'appui" in light mode — **High**
-
-`src/improvers/lt_improver.py:195` (`_first_replacement`) and `:87`
-(`_stays_close_to_the_original`)
-
-```
-IN : Il habite ici depui longtemps.
-OUT: Il habite ici d'appui longtemps.
-```
-
-A dropped final letter is one of the most common dyslexic errors, and the output is a
-different word that changes the sentence. [completion-plan.md](completion-plan.md) describes
-this exact rewrite as the one the span-level guard was built to stop; it is not stopped.
-`tests/test_lt_guardrails.py:158` asserts that it passes, as a "known limitation", and no
-TODO entry recorded it.
-
-Distance alone cannot catch it — two edits on a five-letter word, same as "preske" ->
-"presque". But LanguageTool does offer the right answer:
-`FR_SPELLING_RULE` suggests `["d'appui", "d'étui", "d'époi", "depuis"]`, and the engine only
-ever looks at the first. Two directions worth measuring against the corpus: choose the
-closest suggestion rather than the first, or refuse a replacement that introduces an
-elision the user did not write.
-
-Affects rules A1, A5 and H4.
 
 ### TODO-14 · Hybrid mode can delete words, and nothing checks for it — **High**
 
@@ -261,8 +243,9 @@ and agents act on.
 - **DOC-4 · TODO-2 is filed as an open defect but is resolved.** This file says "partly
   resolved", `completion-plan.md` says "resolved by removal", `business-rules.md` A11 says
   "Superseded", and `_is_whitelist_change` no longer exists. Move it to **Fixed**.
-- **DOC-5 · `completion-plan.md` claims the "depui" rewrite is stopped.** Phase 2 presents
-  span-level judgement as the fix for "depui" -> "d'appui". It is not; see TODO-13.
+
+DOC-5, the completion plan claiming the "depui" rewrite was stopped, was corrected with
+TODO-13 on 2026-09-17.
 
 ---
 
@@ -470,3 +453,57 @@ Two things the fix does not reach. The 0.1.0 installer built on 2026-09-17 preda
 rebuild before shipping. And logs already written on a machine keep their text until the
 rotating handler overwrites them (2 MB × 4) or the app is uninstalled, which always deletes
 `logs\`.
+
+### TODO-13 · "depui" becomes "d'appui" in light mode — **High**
+
+Found by the reinstall test of 2026-09-17.
+
+`src/improvers/lt_improver.py` (first suggestion only; `_stays_close_to_the_original`)
+
+```
+IN : Il habite ici depui longtemps.
+OUT: Il habite ici d'appui longtemps.
+```
+
+A dropped final letter is one of the most common dyslexic errors, and the output was a
+different word that changed the sentence. [completion-plan.md](completion-plan.md) described
+this exact rewrite as the one the span-level guard was built to stop; it was not stopped.
+`tests/test_lt_guardrails.py` asserted that it passed, as a "known limitation", and no TODO
+entry recorded it.
+
+Distance alone cannot catch it — two edits on a five-letter word, same as "preske" ->
+"presque". But LanguageTool offers the right answer, `FR_SPELLING_RULE` suggesting
+`["d'appui", "d'étui", "d'époi", "depuis"]`, and the engine only ever looked at the first.
+
+Affects rules A1, A5 and H4.
+
+**Fixed 2026-09-17**, in two parts.
+
+`_does_not_elide_into_another_word` refuses a replacement that adds an apostrophe and changes
+the user's letters. "jai" -> "j'ai", "sil" -> "s'il" and "lecole" -> "l'école" keep every
+letter and stay allowed. Every elision-adding replacement the corpus produced that changed
+letters was wrong: "d'appui", "d'ans" for "daans", "m'entre" for "montrré", "l'écope" for
+"lecole", "t'acte" for "tantte". Known cost: an elision fix that also needs a spelling fix
+("lecol" -> "l'école") is left alone.
+
+`_choose_replacement` then walks up to four suggestions down LanguageTool's list, but only
+past refusals that mean LanguageTool reached for a different kind of word — a split elision
+or an invented proper noun. Any other refusal still ends the search. Walking past every
+refusal was measured first and rejected: it turned "quil" into "qui", "mangéée" into
+"mangées", and let "Il fiat chaud" become "Il a fiat chaud". Six suggestions
+instead of four reached "Lue" for "Luer".
+
+Guard alone would have been the wrong stopping point: H4 fell to 79.6%, because LanguageTool
+does not flag "d'appui" and the metric had been rewarding the wrong fix.
+
+| Corpus | Before H4 | After H4 | H3 before/after |
+|---|---|---|---|
+| default seed | 82.8% (93 → 16) | **87.1%** (93 → 12) | 0 / 0 |
+| seed 7 | 86.6% (97 → 13) | 86.6% (97 → 13) | 0 / 0 |
+| seed 42 | 76.5% (98 → 23) | 78.6% (98 → 21) | 0 / 0 |
+
+Across the three corpora and 19 probe sentences, 11 texts and 6 probes changed, every one
+for the better: "depuis" 6 times, "douze" 3, "dans" 3, "montré" 2, and "l'école", "devant",
+"tante" and "préfère" once each. None changed for the worse. Adversarial checks pass on all
+three corpora. Seed 42 sits below target before and after, so that is not a
+regression. 17 unit tests added.

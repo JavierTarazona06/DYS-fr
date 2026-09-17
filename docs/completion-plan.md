@@ -189,6 +189,13 @@ is structurally far from what it replaces and a spelling fix is not. The whole-t
 cannot make that call, because "preske" → "presque" and "depui" → "d'appui" are both two
 edits apart.
 
+**Correction, 2026-09-17.** Span-level distance stopped "kompliqué" → "complice", but not
+"depui" → "d'appui": two edits on a five-letter word are within budget at any granularity,
+and the rewrite kept reaching users (TODO-13). What separates it is shape, not distance — a
+new apostrophe that changes the user's letters — and the fix, `_does_not_elide_into_another_word`,
+also lets the engine walk on to LanguageTool's plain suggestion, "depuis". H4 on the fixed
+corpus went from 82.8% to 87.1%.
+
 Residual: TODO-11, where LanguageTool emits two separate replacements whose combined result
 is gibberish. Left open deliberately rather than tightening the budget further, which would
 start refusing legitimate fixes.

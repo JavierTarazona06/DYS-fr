@@ -14,8 +14,10 @@ import pytest
 
 from src.improvers.lt_improver import (
     _BLOCK_RULES,
+    _choose_replacement,
     _debug_filter_enabled,
     _does_not_add_digits,
+    _does_not_elide_into_another_word,
     _does_not_insert_words,
     _does_not_introduce_proper_noun,
     _stays_close_to_the_original,
@@ -156,10 +158,76 @@ class TestRewriteGuard:
     def test_allows_re_segmentation(self):
         assert _stays_close_to_the_original("unepomme", "une pomme") is True
 
-    def test_known_limitation_a_short_word_swap_still_passes(self):
-        """Documented, not accidental: "depui" -> "d'appui" is two edits on a five-letter
-        word, indistinguishable by distance from a legitimate fix of the same shape."""
+    def test_distance_alone_cannot_catch_a_short_word_swap(self):
+        """"depui" -> "d'appui" is two edits on a five-letter word, indistinguishable by
+        distance from a legitimate fix of the same shape. _does_not_elide_into_another_word
+        is what refuses it (TODO-13)."""
         assert _stays_close_to_the_original("depui", "d'appui") is True
+
+
+class TestElisionGuard:
+    """TODO-13: a new apostrophe must restore an elision, not cut the word into another one."""
+
+    def test_refuses_the_rewrites_the_corpus_and_the_app_produced(self):
+        assert _does_not_elide_into_another_word("depui", "d'appui") is False
+        assert _does_not_elide_into_another_word("daans", "d'ans") is False
+        assert _does_not_elide_into_another_word("montrré", "m'entre") is False
+        assert _does_not_elide_into_another_word("lecole", "l'écope") is False
+
+    @pytest.mark.parametrize(
+        "orig, repl",
+        [("jai", "j'ai"), ("cest", "c'est"), ("sil", "s'il"), ("larbre", "l'arbre"),
+         ("daccord", "d'accord"), ("lecole", "l'école"), ("jai", "j’ai")],
+    )
+    def test_allows_restoring_a_missing_apostrophe(self, orig, repl):
+        assert _does_not_elide_into_another_word(orig, repl) is True
+
+    def test_ignores_replacements_that_add_no_apostrophe(self):
+        assert _does_not_elide_into_another_word("preske", "presque") is True
+        assert _does_not_elide_into_another_word("l'ecole", "l'école") is True
+
+    def test_known_cost_an_elision_that_also_needs_a_spelling_fix(self):
+        """Refused on purpose: letters change, so it has the same shape as "depui"."""
+        assert _does_not_elide_into_another_word("lecol", "l'école") is False
+
+
+class TestReplacementChoice:
+    """TODO-13: walk past invented word shapes to LanguageTool's plain suggestion.
+
+    The suggestion lists below are LanguageTool 6.7's real output for each word.
+    """
+
+    def test_walks_past_split_elisions_to_the_fix(self):
+        chosen, refused = _choose_replacement("depui", ["d'appui", "d'étui", "d'époi", "depuis"])
+        assert chosen == "depuis"
+        assert [repl for repl, _ in refused] == ["d'appui", "d'étui", "d'époi"]
+
+    def test_walks_past_invented_proper_nouns_to_the_fix(self):
+        chosen, _ = _choose_replacement("duoze", ["d'Eauze", "d'Aouze", "d'Oze", "douze"])
+        assert chosen == "douze"
+
+    def test_stops_after_a_refused_rewrite(self):
+        """LanguageTool's best guess was too far off; the next ones are guesses too."""
+        chosen, refused = _choose_replacement("quil", ["kil", "cil", "qui", "ciel", "col", "quel"])
+        assert chosen is None
+        assert refused == [("kil", "rewrite_not_correction")]
+
+    def test_stops_after_a_refused_insertion(self):
+        chosen, _ = _choose_replacement("fiat", ["est fiat", "a fiat", "fiât"])
+        assert chosen is None
+
+    def test_keeps_languagetool_order_between_acceptable_suggestions(self):
+        chosen, refused = _choose_replacement("supermarchet", ["supermarché", "supermarchés"])
+        assert chosen == "supermarché"
+        assert refused == []
+
+    def test_returns_none_when_every_suggestion_is_refused(self):
+        chosen, refused = _choose_replacement("duoze", ["d'Eauze"])
+        assert chosen is None
+        assert refused == [("d'Eauze", "introduces_proper_noun")]
+
+    def test_no_candidates_means_no_replacement(self):
+        assert _choose_replacement("mot", []) == (None, [])
 
 
 class TestExistingGuardsStillHold:
