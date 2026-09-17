@@ -283,34 +283,6 @@ as holding on the fixed corpus only. Worth knowing before quoting the number to 
 
 Affects rule H4.
 
-### TODO-21 · The novelty ratio refuses corrections of phonetic writing — **Medium**
-
-`src/guardrails/novelty.py` (`new_content_lemmas`)
-
-Found while fixing TODO-14, in the hybrid outputs collected to measure it. The gate refuses
-corrections of exactly the writing hybrid mode exists for, and names the corrected word as
-the invention:
-
-| Input | LLM output | Refused as |
-|---|---|---|
-| koman tu va ? jai pa compri ce ke tu a di. | Comment tu vas ? J'ai pas compris ce que tu as dit. | novelty 20%: `comment` |
-| Il fo ke je parte o travail kom tou les jour. | Il faut que je parte au travail kom tou le jour. | novelty 16.7%: `falloir` |
-| Je voudré un otomobil rouj pour mon aniversère. | Je voudrais une automobile rouge pour mon anniversaire. | novelty 50%: `vouloir`, `automobile` |
-
-The first and third are faithful. The second is not ("les jour" became "le jour") but was
-refused for "faut", which is right.
-
-The novelty guard recognises a corrected word only by spelling distance, and "koman" ->
-"comment" is four edits. On short texts one such word is enough to cross 12%. The user gets
-their text back uncorrected (TODO-6).
-
-TODO-14 built the missing tolerance: `sound_key` in `src/utils/text.py`, and stem matching in
-`src/guardrails/preservation.py`. The lost-words check already accepts all three pairs. Reusing
-it in `new_content_lemmas` is the obvious fix; measure it against the collected hybrid outputs
-in both directions, since the same tolerance could let a genuinely new word through.
-
-Affects rules A8, A9 and hybrid mode's usefulness.
-
 ---
 
 ## Documentation drift
@@ -672,3 +644,45 @@ the user's text uncorrected, not because hybrid mode corrected it (TODO-6). 25 t
 **Verified in the installed app** the same afternoon, in hybrid mode with Mistral: "Je sui
 aller au magasin." came back unchanged instead of losing its verb, and the dyslexic paragraph
 was still corrected, conjugation fixes included.
+
+### TODO-21 · The novelty ratio refuses corrections of phonetic writing — **Medium**
+
+Found while fixing TODO-14, in the hybrid outputs collected to measure it.
+
+`src/guardrails/novelty.py` (`new_content_lemmas`)
+
+The gate refused corrections of exactly the writing hybrid mode exists for, and named the
+corrected word as the invention:
+
+| Input | LLM output | Refused as |
+|---|---|---|
+| koman tu va ? jai pa compri ce ke tu a di. | Comment tu vas ? J'ai pas compris ce que tu as dit. | novelty 20%: `comment` |
+| Il fo ke je parte o travail kom tou les jour. | Il faut que je parte au travail kom tou le jour. | novelty 16.7%: `falloir` |
+| Je voudré un otomobil rouj pour mon aniversère. | Je voudrais une automobile rouge pour mon anniversaire. | novelty 50%: `vouloir`, `automobile` |
+
+The novelty guard recognised a corrected word only by spelling distance, and "koman" ->
+"comment" is four edits.
+
+Affects rules A8, A9 and hybrid mode's usefulness.
+
+**Fixed 2026-09-17** by reusing the lost-words machinery, now in `src/guardrails/alignment.py`
+and shared by both guards: an output word is not new when it stands in the place of a word
+the user wrote and matches it by spelling, sound or stem.
+
+**The obvious fix was measured first and was wrong.** Sound tolerance against the whole text
+fixed all three refusals, but made the guard blind to inventions. Inserting each of 40
+common words into each of the 30 clean corpus texts (1,140 insertions tagged as content):
+
+| Tolerance | Insertions still caught | Refusals fixed |
+|---|---|---|
+| None (before) | 1,067 (93.6%) | 0 of 3 |
+| Sound, against the whole text | 940 (82.5%) | 3 of 3 |
+| Sound, keys of 3+ letters only | 1,043 (91.5%) | 2 of 3 |
+| **Sound, spelling or stem, aligned** | **1,067 (93.6%)** | **3 of 3** |
+
+An inserted "chat" sounds like "car" somewhere else in the text; aligned, it has no
+counterpart and stays new. That case is now a test.
+
+Known consequence: the second output above is accepted, and "tous les jours" became "tout le
+jour" — a change carried only by function words, which neither this guard nor the lost-words
+check counts. 4 tests added.

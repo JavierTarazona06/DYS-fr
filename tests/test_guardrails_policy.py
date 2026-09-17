@@ -150,6 +150,35 @@ class TestValidateNovelty:
         assert not result.passed
         assert "novelty ratio" in result.reason
 
+    @pytest.mark.parametrize(
+        "original, corrected",
+        [
+            # TODO-21: real hybrid-mode outputs the ratio used to refuse, naming the
+            # corrected word — "comment", "automobile" — as the invention.
+            ("koman tu va ? jai pa compri ce ke tu a di.",
+             "Comment tu vas ? J'ai pas compris ce que tu as dit."),
+            ("Je voudré un otomobil rouj pour mon aniversère.",
+             "Je voudrais une automobile rouge pour mon anniversaire."),
+            ("Il fo ke je parte o travail.", "Il faut que je parte au travail."),
+        ],
+    )
+    def test_a_correction_of_phonetic_writing_scores_no_novelty(self, nlp, original, corrected):
+        result = validate_novelty_ratio(nlp(original), nlp(corrected))
+        assert result.passed, result.reason
+
+    def test_an_inserted_word_is_new_even_when_it_sounds_like_another(self, nlp):
+        """Sound tolerance applies only to a word standing in the place of the user's.
+
+        "chat" sounds one edit away from "car". Compared against the whole text, that
+        excused it; aligned, it has no counterpart and stays an addition.
+        """
+        from src.guardrails.novelty import new_content_lemmas
+
+        added = new_content_lemmas(
+            nlp("Le car est parti ce matin."), nlp("Le car est parti ce matin avec le chat.")
+        )
+        assert added == ["chat"]
+
     def test_the_threshold_is_configurable(self, nlp):
         original, corrected = nlp("Le chat dort."), nlp("Le chat dort profondement.")
         assert not validate_novelty_ratio(original, corrected, threshold=0.0).passed
